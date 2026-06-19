@@ -1,0 +1,84 @@
+"""DashScope-compatible chat completion client."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Sequence
+from typing import Final, Literal, TypedDict
+
+import httpx
+
+from customer_service.knowledge.embeddings import DEFAULT_BASE_URL
+
+
+DEFAULT_CHAT_MODEL: Final = "qwen-plus"
+
+
+class ChatMessage(TypedDict):
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class ChatCompletionError(RuntimeError):
+    """The chat completion service returned an invalid or unsuccessful response."""
+
+
+class DashScopeChatClient:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str = DEFAULT_BASE_URL,
+        model: str = DEFAULT_CHAT_MODEL,
+        timeout: float = 60.0,
+    ) -> None:
+        if not api_key:
+            raise ValueError("api_key 不能为空")
+        if not model:
+            raise ValueError("model 不能为空")
+        self.model = model
+        self._client = httpx.AsyncClient(
+            base_url=base_url.rstrip("/") + "/",
+            timeout=httpx.Timeout(timeout),
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+
+    async def __aenter__(self) -> DashScopeChatClient:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await self._client.aclose()
+
+    async def complete(self, messages: Sequence[ChatMessage]) -> str:
+        if not messages:
+            raise ValueError("messages 不能为空")
+
+        response: httpx.Response | None = None
+        for attempt in range(3):
+            try:
+                response = await self._client.post(
+                    "chat/completions",
+                    json={"model": self.model, "messages": list(messages)},
+                )
+                if response.status_code == 429 or response.status_code >= 500:
+                    response.raise_for_status()
+                break
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.HTTPStatusError) as exc:
+                if attempt == 2:
+                    raise ChatCompletionError("大模型请求失败，已重试 3 次") from exc
+                await asyncio.sleep(2**attempt)
+
+        if response is None:
+            raise ChatCompletionError("大模型请求没有返回响应")
+        if response.is_error:
+            raise ChatCompletionError(
+                f"大模型请求失败: HTTP {response.status_code}: {response.text[:500]}"
+            )
+
+        try:
+            content = response.json()["choices"][0]["message"]["content"]
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            raise ChatCompletionError("大模型响应格式错误") from exc
+        if not isinstance(content, str) or not content.strip():
+            raise ChatCompletionError("大模型响应内容为空")
+        return content.strip()

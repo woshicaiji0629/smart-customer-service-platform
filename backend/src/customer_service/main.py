@@ -16,6 +16,12 @@ from customer_service.knowledge.embeddings import (
     DashScopeEmbeddingClient,
     EmbeddingError,
 )
+from customer_service.knowledge.chat import (
+    DEFAULT_CHAT_MODEL,
+    ChatCompletionError,
+    DashScopeChatClient,
+)
+from customer_service.knowledge.rag import RagService
 from customer_service.knowledge.repository import MAX_SEARCH_LIMIT, KnowledgeRepository
 from customer_service.knowledge.service import KnowledgeSearchService
 
@@ -23,6 +29,7 @@ from customer_service.knowledge.service import KnowledgeSearchService
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.knowledge_search_service = None
+    app.state.rag_service = None
     database_url = os.getenv("DATABASE_URL")
     api_key = os.getenv("DASHSCOPE_API_KEY")
     if not database_url or not api_key:
@@ -31,19 +38,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     repository = KnowledgeRepository(database_url)
     try:
-        async with DashScopeEmbeddingClient(
-            api_key=api_key,
-            base_url=os.getenv("DASHSCOPE_BASE_URL", DEFAULT_BASE_URL),
-            model=DEFAULT_MODEL,
-            dimensions=DEFAULT_DIMENSIONS,
-        ) as embedding_client:
+        base_url = os.getenv("DASHSCOPE_BASE_URL", DEFAULT_BASE_URL)
+        async with (
+            DashScopeEmbeddingClient(
+                api_key=api_key,
+                base_url=base_url,
+                model=DEFAULT_MODEL,
+                dimensions=DEFAULT_DIMENSIONS,
+            ) as embedding_client,
+            DashScopeChatClient(
+                api_key=api_key,
+                base_url=base_url,
+                model=os.getenv("DASHSCOPE_CHAT_MODEL", DEFAULT_CHAT_MODEL),
+            ) as chat_client,
+        ):
             app.state.knowledge_search_service = KnowledgeSearchService(
                 repository=repository,
                 embedding_client=embedding_client,
             )
+            app.state.rag_service = RagService(
+                search_service=app.state.knowledge_search_service,
+                chat_client=chat_client,
+            )
             yield
     finally:
         app.state.knowledge_search_service = None
+        app.state.rag_service = None
         await repository.close()
 
 
@@ -76,6 +96,29 @@ class KnowledgeSearchResponse(BaseModel):
     results: list[KnowledgeSearchItem]
 
 
+class RagAnswerRequest(BaseModel):
+    question: str
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("question 不能为空")
+        return value
+
+
+class RagSourceResponse(BaseModel):
+    article_id: str
+    title: str
+    source_url: str
+
+
+class RagAnswerResponse(BaseModel):
+    answer: str
+    sources: list[RagSourceResponse]
+
+
 def get_knowledge_search_service(request: Request) -> KnowledgeSearchService:
     service: KnowledgeSearchService | None = getattr(
         request.app.state,
@@ -94,6 +137,19 @@ KnowledgeSearchServiceDependency = Annotated[
     KnowledgeSearchService,
     Depends(get_knowledge_search_service),
 ]
+
+
+def get_rag_service(request: Request) -> RagService:
+    service: RagService | None = getattr(request.app.state, "rag_service", None)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RAG 问答服务未配置",
+        )
+    return service
+
+
+RagServiceDependency = Annotated[RagService, Depends(get_rag_service)]
 
 
 @app.get("/health", tags=["system"])
@@ -134,4 +190,43 @@ async def search_knowledge(
             )
             for result in results
         ]
+    )
+
+
+@app.post(
+    "/knowledge/answer",
+    response_model=RagAnswerResponse,
+    tags=["knowledge"],
+)
+async def answer_from_knowledge(
+    body: RagAnswerRequest,
+    service: RagServiceDependency,
+) -> RagAnswerResponse:
+    try:
+        result = await service.answer(body.question)
+    except EmbeddingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Embedding 服务请求失败",
+        ) from exc
+    except ChatCompletionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="大模型服务请求失败",
+        ) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="知识库暂时不可用",
+        ) from exc
+    return RagAnswerResponse(
+        answer=result.answer,
+        sources=[
+            RagSourceResponse(
+                article_id=source.article_id,
+                title=source.title,
+                source_url=source.source_url,
+            )
+            for source in result.sources
+        ],
     )
