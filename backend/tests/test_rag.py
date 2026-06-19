@@ -10,6 +10,7 @@ from customer_service.knowledge.rag import (
     NO_KNOWLEDGE_ANSWER,
     RagAnswer,
     RagCitationError,
+    RagHistoryMessage,
     RagService,
     RagSource,
 )
@@ -199,6 +200,49 @@ def test_rag_service_retries_answer_with_invalid_citation() -> None:
     assert result.answer == "请查询链上状态。[资料 1]"
     assert len(chat_client.requests) == 2
     assert "不存在的资料编号：3" in chat_client.requests[1][-1]["content"]
+
+
+def test_rag_service_rewrites_follow_up_with_recent_sanitized_history() -> None:
+    chat_client = SequencedChatClient(
+        [
+            "提现完成但钱包未到账时应该联系谁？",
+            "请联系接收钱包提供商。[资料 1]",
+        ]
+    )
+    search_service = FakeSearchService()
+    service = RagService(
+        search_service=search_service,  # type: ignore[arg-type]
+        chat_client=chat_client,  # type: ignore[arg-type]
+    )
+    history = [
+        RagHistoryMessage(role="user", content=f"旧问题 {index}")
+        for index in range(7)
+    ]
+    history.append(
+        RagHistoryMessage(
+            role="assistant",
+            content="之前的回答。[资料 9]",
+        )
+    )
+
+    result = asyncio.run(
+        service.answer(
+            "那我要联系谁？",
+            history=history,
+        )
+    )
+
+    assert search_service.query == "提现完成但钱包未到账时应该联系谁？"
+    assert result.answer == "请联系接收钱包提供商。[资料 1]"
+    assert len(chat_client.requests) == 2
+    rewrite_prompt = chat_client.requests[0][1]["content"]
+    answer_prompt = chat_client.requests[1][1]["content"]
+    assert "旧问题 0" not in rewrite_prompt
+    assert "旧问题 1" not in rewrite_prompt
+    assert "旧问题 2" in rewrite_prompt
+    assert "[资料 9]" not in rewrite_prompt
+    assert "[资料 9]" not in answer_prompt
+    assert "之前的回答。" in answer_prompt
 
 
 def test_rag_service_rejects_invalid_citation_after_retry() -> None:

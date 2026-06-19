@@ -187,6 +187,24 @@ class ConversationRepository:
             assistant_message=_message_from_row(assistant_row),
         )
 
+    async def get_recent_messages(
+        self,
+        conversation_id: UUID,
+        *,
+        limit: int,
+    ) -> list[MessageRecord]:
+        if limit <= 0:
+            raise ValueError("limit 必须大于 0")
+        statement = (
+            select(messages)
+            .where(messages.c.conversation_id == conversation_id)
+            .order_by(messages.c.created_at.desc(), messages.c.id.desc())
+            .limit(limit)
+        )
+        async with self.engine.connect() as connection:
+            rows = (await connection.execute(statement)).mappings().all()
+        return list(reversed([_message_from_row(row) for row in rows]))
+
     async def get_history(self, conversation_id: UUID) -> ConversationHistory:
         conversation_statement = select(conversations).where(
             conversations.c.id == conversation_id

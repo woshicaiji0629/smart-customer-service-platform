@@ -11,10 +11,11 @@ from customer_service.conversations.repository import (
     ConversationRepository,
     ConversationTurn,
 )
-from customer_service.knowledge.rag import RagService
+from customer_service.knowledge.rag import RagHistoryMessage, RagService
 
 
 MAX_MESSAGE_LENGTH = 4_000
+MAX_HISTORY_MESSAGES = 6
 
 
 class ConversationService:
@@ -43,7 +44,18 @@ class ConversationService:
         if not await self._repository.conversation_exists(conversation_id):
             raise ConversationNotFoundError(str(conversation_id))
 
-        answer = await self._rag_service.answer(normalized_content)
+        recent_messages = await self._repository.get_recent_messages(
+            conversation_id,
+            limit=MAX_HISTORY_MESSAGES,
+        )
+        history = [
+            RagHistoryMessage(role=message.role, content=message.content)
+            for message in recent_messages
+        ]
+        answer = await self._rag_service.answer(
+            normalized_content,
+            history=history,
+        )
         sources = [
             {
                 "article_id": source.article_id,

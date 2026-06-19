@@ -15,7 +15,7 @@ from customer_service.conversations.repository import (
     messages,
 )
 from customer_service.conversations.service import ConversationService
-from customer_service.knowledge.rag import RagAnswer, RagSource
+from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage, RagSource
 from customer_service.main import app
 
 
@@ -60,8 +60,15 @@ def _turn() -> ConversationTurn:
 
 
 class FakeConversationRepository:
-    def __init__(self, *, exists: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        exists: bool = True,
+        recent_messages: list[MessageRecord] | None = None,
+    ) -> None:
         self.exists = exists
+        self.recent_messages = recent_messages or []
+        self.recent_limit: int | None = None
         self.saved: dict[str, object] | None = None
 
     async def create_conversation(self) -> ConversationRecord:
@@ -73,6 +80,15 @@ class FakeConversationRepository:
     async def save_turn(self, **values: object) -> ConversationTurn:
         self.saved = values
         return _turn()
+
+    async def get_recent_messages(
+        self,
+        conversation_id: UUID,
+        *,
+        limit: int,
+    ) -> list[MessageRecord]:
+        self.recent_limit = limit
+        return self.recent_messages
 
     async def get_history(self, conversation_id: UUID) -> ConversationHistory:
         if not self.exists:
@@ -87,9 +103,16 @@ class FakeConversationRepository:
 class FakeRagService:
     def __init__(self) -> None:
         self.question: str | None = None
+        self.history: list[RagHistoryMessage] = []
 
-    async def answer(self, question: str) -> RagAnswer:
+    async def answer(
+        self,
+        question: str,
+        *,
+        history: list[RagHistoryMessage],
+    ) -> RagAnswer:
         self.question = question
+        self.history = history
         return RagAnswer(
             answer="请查询 TxID。[资料 1]",
             sources=[
@@ -125,6 +148,8 @@ def test_conversation_service_saves_complete_turn_after_rag() -> None:
     turn = asyncio.run(service.send_message(CONVERSATION_ID, "  提现没有到账  "))
 
     assert rag_service.question == "提现没有到账"
+    assert rag_service.history == []
+    assert repository.recent_limit == 6
     assert repository.saved == {
         "conversation_id": CONVERSATION_ID,
         "user_content": "提现没有到账",
@@ -157,6 +182,29 @@ def test_conversation_service_rejects_missing_conversation_before_rag() -> None:
 
     assert rag_service.question is None
     assert repository.saved is None
+
+
+def test_conversation_service_passes_recent_messages_to_rag() -> None:
+    previous_turn = _turn()
+    repository = FakeConversationRepository(
+        recent_messages=[
+            previous_turn.user_message,
+            previous_turn.assistant_message,
+        ]
+    )
+    rag_service = FakeRagService()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=rag_service,  # type: ignore[arg-type]
+    )
+
+    asyncio.run(service.send_message(CONVERSATION_ID, "那我要联系谁？"))
+
+    assert repository.recent_limit == 6
+    assert rag_service.history == [
+        RagHistoryMessage(role="user", content="提现没有到账"),
+        RagHistoryMessage(role="assistant", content="请查询 TxID。[资料 1]"),
+    ]
 
 
 class FakeConversationService:
