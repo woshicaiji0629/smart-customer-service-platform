@@ -24,6 +24,27 @@ cd backend
 uv run pytest
 ```
 
+## 构建知识检索库
+
+知识库使用 PostgreSQL、pgvector 和阿里云百炼 `text-embedding-v4`（1024 维）。
+数据库用户需要具备创建 `vector` 扩展和数据表的权限。
+
+```bash
+cd backend
+export DATABASE_URL='postgresql+asyncpg://用户名:密码@主机:5432/数据库名'
+export DASHSCOPE_API_KEY='百炼 API Key'
+uv run python -m script.build_knowledge_index
+```
+
+构建脚本根据文章内容哈希跳过未变化文档。首次验证可以添加 `--limit 3`，
+确认无误后再执行全量构建。不要把数据库密码或 API Key 提交到仓库。
+
+使用内部命令验证语义检索结果：
+
+```bash
+uv run python -m script.search_knowledge '提现已经完成但钱包没有到账' --limit 5
+```
+
 ## 功能规划
 
 1. 会话与消息管理。

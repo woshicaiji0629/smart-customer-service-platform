@@ -1,0 +1,1065 @@
+{
+  "source": "https://www.bitget.com/zh-CN/support",
+  "crawled_at": "2026-06-19T03:38:37.596721+00:00",
+  "categories": {
+    "account_security": {
+      "id": "11865590960602",
+      "name": "账户与安全"
+    },
+    "identity_verification": {
+      "id": "11865590960626",
+      "name": "身份认证"
+    },
+    "deposit_withdrawal": {
+      "id": "11865590960506",
+      "name": "充值与提现"
+    },
+    "activities_rewards": {
+      "id": "11865590960578",
+      "name": "活动和奖励"
+    },
+    "fiat_c2c": {
+      "id": "11865590960554",
+      "name": "法币与 C2C"
+    },
+    "new_user_guide": {
+      "id": "12508313445695",
+      "name": "新用户指南"
+    },
+    "spot_trading": {
+      "id": "11865590961264",
+      "name": "现货交易"
+    }
+  },
+  "article_count": 114,
+  "error_count": 0,
+  "articles": [
+    {
+      "id": "12560603820706",
+      "title": "什么是充值/提现费用？",
+      "category": "充值与提现",
+      "section": "充值/提现实用技巧",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820706",
+      "published_at": "2025-01-14 06:37",
+      "file": "bitget_support/充值与提现/充值与提现实用技巧/什么是充值 - 提现费用？.md"
+    },
+    {
+      "id": "12560603829227",
+      "title": "如何查找币种合约地址？",
+      "category": "充值与提现",
+      "section": "充值/提现实用技巧",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603829227",
+      "published_at": "2025-06-10 14:19",
+      "file": "bitget_support/充值与提现/充值与提现实用技巧/如何查找币种合约地址？.md"
+    },
+    {
+      "id": "12560603820704",
+      "title": "如何检查我的 TxID？",
+      "category": "充值与提现",
+      "section": "充值/提现实用技巧",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820704",
+      "published_at": "2025-01-14 06:35",
+      "file": "bitget_support/充值与提现/充值与提现实用技巧/如何检查我的 TxID？.md"
+    },
+    {
+      "id": "12560603807361",
+      "title": "为什么我提现受限或被暂停？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603807361",
+      "published_at": "2024-03-29 09:00",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/为什么我提现受限或被暂停？.md"
+    },
+    {
+      "id": "12560603807342",
+      "title": "为什么我的充值金额没有存入 Bitget 账户？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603807342",
+      "published_at": "2024-03-29 08:58",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/为什么我的充值金额没有存入 Bitget 账户？.md"
+    },
+    {
+      "id": "12560603820649",
+      "title": "为什么我的提现没有到账？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820649",
+      "published_at": "2025-02-05 08:00",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/为什么我的提现没有到账？.md"
+    },
+    {
+      "id": "12560603820705",
+      "title": "为什么我的资产被冻结？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820705",
+      "published_at": "2025-01-02 09:53",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/为什么我的资产被冻结？.md"
+    },
+    {
+      "id": "12560603820594",
+      "title": "如何处理充值币种或区块链选择错误？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820594",
+      "published_at": "2025-01-14 06:15",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/如何处理充值币种或区块链选择错误？.md"
+    },
+    {
+      "id": "12560603820602",
+      "title": "如何处理其他交易所发起退款至 Bitget 热钱包？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820602",
+      "published_at": "2025-01-14 06:17",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/如何处理其他交易所发起退款至 Bitget 热钱包？.md"
+    },
+    {
+      "id": "12560603820697",
+      "title": "如何处理标签错误或缺失的提现问题？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820697",
+      "published_at": "2025-01-28 03:41",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/如何处理标签错误或缺失的提现问题？.md"
+    },
+    {
+      "id": "12560603820618",
+      "title": "如何处理误存入合约地址的情况？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820618",
+      "published_at": "2024-12-31 03:51",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/如何处理误存入合约地址的情况？.md"
+    },
+    {
+      "id": "12560603820614",
+      "title": "如何处理误存入已删除账户的情况？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820614",
+      "published_at": "2025-01-14 06:22",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/如何处理误存入已删除账户的情况？.md"
+    },
+    {
+      "id": "12560603820616",
+      "title": "如何处理误存入旧地址/过期地址的情况？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820616",
+      "published_at": "2025-01-14 06:23",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/如何处理误存入旧地址 - 过期地址的情况？.md"
+    },
+    {
+      "id": "12560603820612",
+      "title": "如何处理误存至 Bitget 热钱包的问题？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820612",
+      "published_at": "2025-01-14 06:18",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/如何处理误存至 Bitget 热钱包的问题？.md"
+    },
+    {
+      "id": "12560603820698",
+      "title": "如何处理资产下架并暂停提现？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820698",
+      "published_at": "2025-01-14 06:29",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/如何处理资产下架并暂停提现？.md"
+    },
+    {
+      "id": "12560603820699",
+      "title": "如何处理错误提取到合约地址的问题？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820699",
+      "published_at": "2025-01-02 09:47",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/如何处理错误提取到合约地址的问题？.md"
+    },
+    {
+      "id": "12560603811939",
+      "title": "如何追回因错误/遗失标签/Memo 而损失的充值？",
+      "category": "充值与提现",
+      "section": "充值/提现问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603811939",
+      "published_at": "2024-06-28 12:38",
+      "file": "bitget_support/充值与提现/充值与提现问题排除/如何追回因错误 - 遗失标签 - Memo 而损失的充值？.md"
+    },
+    {
+      "id": "12560603839839",
+      "title": "Bitget 宣布支持 Tether (USDT) – Plasma 网络服务",
+      "category": "充值与提现",
+      "section": "加密货币充值",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603839839",
+      "published_at": "2025-10-15 08:00",
+      "file": "bitget_support/充值与提现/加密货币充值/Bitget 宣布支持 Tether (USDT) – Plasma 网络服务.md"
+    },
+    {
+      "id": "12560603837138",
+      "title": "Bitget 宣布支持AB (AB) – ABCORE 网络服务",
+      "category": "充值与提现",
+      "section": "加密货币充值",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603837138",
+      "published_at": "2025-09-05 10:30",
+      "file": "bitget_support/充值与提现/加密货币充值/Bitget 宣布支持AB (AB) – ABCORE 网络服务.md"
+    },
+    {
+      "id": "12560603837887",
+      "title": "Bitget 宣布支持Boost (BOOST) – BEP20网络服务",
+      "category": "充值与提现",
+      "section": "加密货币充值",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603837887",
+      "published_at": "2025-09-16 10:00",
+      "file": "bitget_support/充值与提现/加密货币充值/Bitget 宣布支持Boost (BOOST) – BEP20网络服务.md"
+    },
+    {
+      "id": "12560603837237",
+      "title": "Bitget 宣布支持Circle (USDC) – Morph 和 Tether (USDT)– Morph网络服务",
+      "category": "充值与提现",
+      "section": "加密货币充值",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603837237",
+      "published_at": "2025-09-08 10:00",
+      "file": "bitget_support/充值与提现/加密货币充值/Bitget 宣布支持Circle (USDC) – Morph 和 Tether (USDT)– Morph网络服务.md"
+    },
+    {
+      "id": "12560603811800",
+      "title": "如何在 Bitget 上充值加密货币 - App 端指南",
+      "category": "充值与提现",
+      "section": "加密货币充值",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603811800",
+      "published_at": "2024-06-26 12:23",
+      "file": "bitget_support/充值与提现/加密货币充值/如何在 Bitget 上充值加密货币 - App 端指南.md"
+    },
+    {
+      "id": "12560603811798",
+      "title": "如何在 Bitget 上充值加密货币 - 网页端指南",
+      "category": "充值与提现",
+      "section": "加密货币充值",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603811798",
+      "published_at": "2024-06-26 11:43",
+      "file": "bitget_support/充值与提现/加密货币充值/如何在 Bitget 上充值加密货币 - 网页端指南.md"
+    },
+    {
+      "id": "12560603811938",
+      "title": "如何申请充值未到账找回",
+      "category": "充值与提现",
+      "section": "加密货币充值",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603811938",
+      "published_at": "2024-06-28 11:42",
+      "file": "bitget_support/充值与提现/加密货币充值/如何申请充值未到账找回.md"
+    },
+    {
+      "id": "12560603811576",
+      "title": "如何从 Bitget 提现加密货币 - 移动应用程序指南",
+      "category": "充值与提现",
+      "section": "加密货币提现",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603811576",
+      "published_at": "2024-06-22 10:56",
+      "file": "bitget_support/充值与提现/加密货币提现/如何从 Bitget 提现加密货币 - 移动应用程序指南.md"
+    },
+    {
+      "id": "12560603811575",
+      "title": "如何从 Bitget 提现加密货币 - 网站指南",
+      "category": "充值与提现",
+      "section": "加密货币提现",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603811575",
+      "published_at": "2024-06-22 10:17",
+      "file": "bitget_support/充值与提现/加密货币提现/如何从 Bitget 提现加密货币 - 网站指南.md"
+    },
+    {
+      "id": "12560603811654",
+      "title": "如何在 Bitget 上进行内部转账 - 移动应用指南",
+      "category": "充值与提现",
+      "section": "加密货币提现",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603811654",
+      "published_at": "2024-06-24 12:31",
+      "file": "bitget_support/充值与提现/加密货币提现/如何在 Bitget 上进行内部转账 - 移动应用指南.md"
+    },
+    {
+      "id": "12560603811651",
+      "title": "如何在 Bitget 上进行内部转账 - 网站指南",
+      "category": "充值与提现",
+      "section": "加密货币提现",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603811651",
+      "published_at": "2024-06-24 11:39",
+      "file": "bitget_support/充值与提现/加密货币提现/如何在 Bitget 上进行内部转账 - 网站指南.md"
+    },
+    {
+      "id": "12560603820644",
+      "title": "如何查看我的提现状态？",
+      "category": "充值与提现",
+      "section": "加密货币提现",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820644",
+      "published_at": "2025-01-28 03:42",
+      "file": "bitget_support/充值与提现/加密货币提现/如何查看我的提现状态？.md"
+    },
+    {
+      "id": "12560603820641",
+      "title": "如何管理我的 Bitget 账户的提现设置？",
+      "category": "充值与提现",
+      "section": "加密货币提现",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820641",
+      "published_at": "2024-12-31 03:53",
+      "file": "bitget_support/充值与提现/加密货币提现/如何管理我的 Bitget 账户的提现设置？.md"
+    },
+    {
+      "id": "12560603820708",
+      "title": "如何在 Bitget 账户之间划转资产？- 网络指南",
+      "category": "充值与提现",
+      "section": "资产划转",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820708",
+      "published_at": "2025-01-14 06:38",
+      "file": "bitget_support/充值与提现/资产划转/如何在 Bitget 账户之间划转资产？ - 网络指南.md"
+    },
+    {
+      "id": "12560603820709",
+      "title": "如何在 Bitget 账户之间转移资产？- Bitget APP指南",
+      "category": "充值与提现",
+      "section": "资产划转",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820709",
+      "published_at": "2025-01-02 09:58",
+      "file": "bitget_support/充值与提现/资产划转/如何在 Bitget 账户之间转移资产？ - Bitget APP指南.md"
+    },
+    {
+      "id": "12560603825829",
+      "title": "Bitget 费用详解",
+      "category": "新用户指南",
+      "section": "新用户指南",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603825829",
+      "published_at": "2025-04-17 10:24",
+      "file": "bitget_support/新用户指南/Bitget 费用详解.md"
+    },
+    {
+      "id": "12560603884431",
+      "title": "如何优化 Bitget 交易体验",
+      "category": "新用户指南",
+      "section": "新用户指南",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603884431",
+      "published_at": "2026-05-28 08:01",
+      "file": "bitget_support/新用户指南/如何优化 Bitget 交易体验.md"
+    },
+    {
+      "id": "12560603827678",
+      "title": "如何使用 Bitget 直播功能？",
+      "category": "新用户指南",
+      "section": "新用户指南",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603827678",
+      "published_at": "2025-05-19 09:52",
+      "file": "bitget_support/新用户指南/如何使用 Bitget 直播功能？.md"
+    },
+    {
+      "id": "12560603824169",
+      "title": "如何导出 Bitget 账户数据？",
+      "category": "新用户指南",
+      "section": "新用户指南",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603824169",
+      "published_at": "2025-03-14 10:00",
+      "file": "bitget_support/新用户指南/如何导出 Bitget 账户数据？.md"
+    },
+    {
+      "id": "12560603808647",
+      "title": "如何查看您的Bitget 账户用户 ID",
+      "category": "新用户指南",
+      "section": "新用户指南",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603808647",
+      "published_at": "2024-04-23 13:18",
+      "file": "bitget_support/新用户指南/如何查看您的Bitget 账户用户 ID.md"
+    },
+    {
+      "id": "12560603884156",
+      "title": "现货智能订单功能入门指南",
+      "category": "新用户指南",
+      "section": "新用户指南",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603884156",
+      "published_at": "2026-05-22 04:00",
+      "file": "bitget_support/新用户指南/现货智能订单功能入门指南.md"
+    },
+    {
+      "id": "12560603843507",
+      "title": "如何在 Bitget 通过 SWIFT 充值与提现美元（USD）？",
+      "category": "法币与 C2C",
+      "section": "银行充值/提现",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603843507",
+      "published_at": "2025-11-28 07:00",
+      "file": "bitget_support/法币与 C2C/银行充值与提现/如何在 Bitget 通过 SWIFT 充值与提现美元（USD）？.md"
+    },
+    {
+      "id": "12560603821847",
+      "title": "CandyBomb",
+      "category": "活动和奖励",
+      "section": "活动及奖励",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821847",
+      "published_at": "2025-01-23 05:51",
+      "file": "bitget_support/活动和奖励/活动及奖励/CandyBomb.md"
+    },
+    {
+      "id": "12560603821848",
+      "title": "什么是 Bitget 体验金？如何使用？",
+      "category": "活动和奖励",
+      "section": "福利和卡券",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821848",
+      "published_at": "2025-01-23 05:59",
+      "file": "bitget_support/活动和奖励/福利和卡券/什么是 Bitget 体验金？如何使用？.md"
+    },
+    {
+      "id": "12560603821851",
+      "title": "什么是体验券以及如何使用？",
+      "category": "活动和奖励",
+      "section": "福利和卡券",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821851",
+      "published_at": "2025-01-23 06:32",
+      "file": "bitget_support/活动和奖励/福利和卡券/什么是体验券以及如何使用？.md"
+    },
+    {
+      "id": "12560603821853",
+      "title": "Bitget 奖励条款和条件",
+      "category": "活动和奖励",
+      "section": "获奖规则和资格",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821853",
+      "published_at": "2025-01-23 06:53",
+      "file": "bitget_support/活动和奖励/获奖规则和资格/Bitget 奖励条款和条件.md"
+    },
+    {
+      "id": "12560603823791",
+      "title": "如何使用新版 Bitget 闪兑？",
+      "category": "现货交易",
+      "section": "现货交易教程",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603823791",
+      "published_at": "2025-03-10 07:00",
+      "file": "bitget_support/现货交易/现货交易教程/如何使用新版 Bitget 闪兑？.md"
+    },
+    {
+      "id": "12560603775330",
+      "title": "如何在 Bitget 上进行现货交易",
+      "category": "现货交易",
+      "section": "现货交易教程",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603775330",
+      "published_at": "2022-11-23 04:28",
+      "file": "bitget_support/现货交易/现货交易教程/如何在 Bitget 上进行现货交易.md"
+    },
+    {
+      "id": "12560603820580",
+      "title": "如何在 Bitget 上进行现货交易？（App 端指南）",
+      "category": "现货交易",
+      "section": "现货交易教程",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820580",
+      "published_at": "2024-12-30 05:19",
+      "file": "bitget_support/现货交易/现货交易教程/如何在 Bitget 上进行现货交易？（App 端指南）.md"
+    },
+    {
+      "id": "12560603820568",
+      "title": "如何在 Bitget 上进行现货交易？（网页端指南）",
+      "category": "现货交易",
+      "section": "现货交易教程",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820568",
+      "published_at": "2024-12-30 04:00",
+      "file": "bitget_support/现货交易/现货交易教程/如何在 Bitget 上进行现货交易？（网页端指南）.md"
+    },
+    {
+      "id": "8120063495449",
+      "title": "如何将小额资产为 BGB？",
+      "category": "现货交易",
+      "section": "现货交易教程",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/8120063495449",
+      "published_at": "2025-11-09 06:00",
+      "file": "bitget_support/现货交易/现货交易教程/如何将小额资产为 BGB？.md"
+    },
+    {
+      "id": "12560603820581",
+      "title": "为什么我的限价单没有成交或没有立即成交？",
+      "category": "现货交易",
+      "section": "现货交易概念",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820581",
+      "published_at": "2024-12-30 05:39",
+      "file": "bitget_support/现货交易/现货交易概念/为什么我的限价单没有成交或没有立即成交？.md"
+    },
+    {
+      "id": "12560603820650",
+      "title": "什么是做市商和吃单方？",
+      "category": "现货交易",
+      "section": "现货交易概念",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820650",
+      "published_at": "2025-01-10 07:43",
+      "file": "bitget_support/现货交易/现货交易概念/什么是做市商和吃单方？.md"
+    },
+    {
+      "id": "12560603820642",
+      "title": "什么是市价单和限价单？",
+      "category": "现货交易",
+      "section": "现货交易概念",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820642",
+      "published_at": "2025-01-16 05:15",
+      "file": "bitget_support/现货交易/现货交易概念/什么是市价单和限价单？.md"
+    },
+    {
+      "id": "12560603820588",
+      "title": "如何读懂盈亏分析？",
+      "category": "现货交易",
+      "section": "现货交易概念",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820588",
+      "published_at": "2024-12-30 07:07",
+      "file": "bitget_support/现货交易/现货交易概念/如何读懂盈亏分析？.md"
+    },
+    {
+      "id": "12560603820496",
+      "title": "Bitget 现货手续费返还券介绍",
+      "category": "现货交易",
+      "section": "现货交易规则及费用",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820496",
+      "published_at": "2024-04-28 05:14",
+      "file": "bitget_support/现货交易/现货交易规则及费用/Bitget 现货手续费返还券介绍.md"
+    },
+    {
+      "id": "12560603777383",
+      "title": "Bitget现金券",
+      "category": "现货交易",
+      "section": "现货交易规则及费用",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603777383",
+      "published_at": "2023-02-27 16:00",
+      "file": "bitget_support/现货交易/现货交易规则及费用/Bitget现金券.md"
+    },
+    {
+      "id": "12560603820584",
+      "title": "现货交易手续费、限制和规则",
+      "category": "现货交易",
+      "section": "现货交易规则及费用",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820584",
+      "published_at": "2024-12-30 06:09",
+      "file": "bitget_support/现货交易/现货交易规则及费用/现货交易手续费、限制和规则.md"
+    },
+    {
+      "id": "4411737348761",
+      "title": "了解 OCO 订单、计划委托和追踪止损委托",
+      "category": "现货交易",
+      "section": "现货账户工具及功能",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/4411737348761-%E8%AE%A1%E5%88%92%E5%A7%94%E6%89%98",
+      "published_at": "2025-11-12 01:00",
+      "file": "bitget_support/现货交易/现货账户工具及功能/了解 OCO 订单、计划委托和追踪止损委托.md"
+    },
+    {
+      "id": "12560603807828",
+      "title": "什么是 BBO 订单及如何使用？",
+      "category": "现货交易",
+      "section": "现货账户工具及功能",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603807828",
+      "published_at": "2025-11-10 02:00",
+      "file": "bitget_support/现货交易/现货账户工具及功能/什么是 BBO 订单及如何使用？.md"
+    },
+    {
+      "id": "12560603820672",
+      "title": "什么是冰山委托？",
+      "category": "现货交易",
+      "section": "现货账户工具及功能",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820672",
+      "published_at": "2025-01-10 05:44",
+      "file": "bitget_support/现货交易/现货账户工具及功能/什么是冰山委托？.md"
+    },
+    {
+      "id": "12560603821825",
+      "title": "如何注销我的 Bitget 账户？–App 端指南",
+      "category": "账户与安全",
+      "section": "关闭账户",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821825",
+      "published_at": "2025-01-23 03:21",
+      "file": "bitget_support/账户与安全/关闭账户/如何注销我的 Bitget 账户？–App 端指南.md"
+    },
+    {
+      "id": "12560603807406",
+      "title": "如何注销我的 Bitget 账户？–网页端指南",
+      "category": "账户与安全",
+      "section": "关闭账户",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603807406",
+      "published_at": "2024-03-29 09:01",
+      "file": "bitget_support/账户与安全/关闭账户/如何注销我的 Bitget 账户？–网页端指南.md"
+    },
+    {
+      "id": "12560603821839",
+      "title": "如何为我的 Bitget 账户设置资金密码？- App 端指南",
+      "category": "账户与安全",
+      "section": "密码和资金安全",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821839",
+      "published_at": "2025-01-23 04:01",
+      "file": "bitget_support/账户与安全/密码和资金安全/如何为我的 Bitget 账户设置资金密码？ - App 端指南.md"
+    },
+    {
+      "id": "12560603821838",
+      "title": "如何为我的 Bitget 账户设置资金密码？- 网页端指南",
+      "category": "账户与安全",
+      "section": "密码和资金安全",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821838",
+      "published_at": "2025-01-23 03:57",
+      "file": "bitget_support/账户与安全/密码和资金安全/如何为我的 Bitget 账户设置资金密码？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603821818",
+      "title": "如何修改我的 Bitget 帐户密码？- 网页端指南",
+      "category": "账户与安全",
+      "section": "密码和资金安全",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821818",
+      "published_at": "2025-01-23 02:54",
+      "file": "bitget_support/账户与安全/密码和资金安全/如何修改我的 Bitget 帐户密码？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603821819",
+      "title": "如何修改我的 Bitget 账户密码？- App 端指南",
+      "category": "账户与安全",
+      "section": "密码和资金安全",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821819",
+      "published_at": "2025-01-23 02:57",
+      "file": "bitget_support/账户与安全/密码和资金安全/如何修改我的 Bitget 账户密码？ - App 端指南.md"
+    },
+    {
+      "id": "12560603821841",
+      "title": "如何更改我的 Bitget 账户的资金密码？- 网页端指南",
+      "category": "账户与安全",
+      "section": "密码和资金安全",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821841",
+      "published_at": "2025-01-23 04:06",
+      "file": "bitget_support/账户与安全/密码和资金安全/如何更改我的 Bitget 账户的资金密码？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603821843",
+      "title": "如何更改我的 Bitget 账户资金密码？- App 端指南",
+      "category": "账户与安全",
+      "section": "密码和资金安全",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821843",
+      "published_at": "2025-01-23 04:10",
+      "file": "bitget_support/账户与安全/密码和资金安全/如何更改我的 Bitget 账户资金密码？ - App 端指南.md"
+    },
+    {
+      "id": "12560603821821",
+      "title": "如何重置我的 Bitget 帐户密码？- 网页端指南",
+      "category": "账户与安全",
+      "section": "密码和资金安全",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821821",
+      "published_at": "2025-01-23 03:02",
+      "file": "bitget_support/账户与安全/密码和资金安全/如何重置我的 Bitget 帐户密码？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603821823",
+      "title": "如何重置我的 Bitget 账户密码？ - App 端指南",
+      "category": "账户与安全",
+      "section": "密码和资金安全",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821823",
+      "published_at": "2025-01-23 03:07",
+      "file": "bitget_support/账户与安全/密码和资金安全/如何重置我的 Bitget 账户密码？ - App 端指南.md"
+    },
+    {
+      "id": "12560603808285",
+      "title": "如何使用二维码通过 Bitget 网页端登录",
+      "category": "账户与安全",
+      "section": "注册和登录",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603808285",
+      "published_at": "2024-04-16 09:40",
+      "file": "bitget_support/账户与安全/注册和登录/如何使用二维码通过 Bitget 网页端登录.md"
+    },
+    {
+      "id": "12560603808267",
+      "title": "如何注册 Bitget 账户？ - App 端教程",
+      "category": "账户与安全",
+      "section": "注册和登录",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603808267",
+      "published_at": "2024-04-16 08:32",
+      "file": "bitget_support/账户与安全/注册和登录/如何注册 Bitget 账户？ - App 端教程.md"
+    },
+    {
+      "id": "12560603808241",
+      "title": "如何注册 Bitget 账户？- 网页端指南",
+      "category": "账户与安全",
+      "section": "注册和登录",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603808241",
+      "published_at": "2024-04-16 08:32",
+      "file": "bitget_support/账户与安全/注册和登录/如何注册 Bitget 账户？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603821287",
+      "title": "什么是网络钓鱼以及如何防范？",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821287",
+      "published_at": "2025-01-17 02:28",
+      "file": "bitget_support/账户与安全/账户安全提示/什么是网络钓鱼以及如何防范？.md"
+    },
+    {
+      "id": "12560603816489",
+      "title": "关于华为手机下载身份验证器及绑定步骤",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603816489",
+      "published_at": "2024-10-07 14:35",
+      "file": "bitget_support/账户与安全/账户安全提示/关于华为手机下载身份验证器及绑定步骤.md"
+    },
+    {
+      "id": "12560603821297",
+      "title": "如何为我的 Bitget 账户设置/修改防钓鱼码？（App 端指南）",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821297",
+      "published_at": "2025-01-17 02:30",
+      "file": "bitget_support/账户与安全/账户安全提示/如何为我的 Bitget 账户设置 - 修改防钓鱼码？（App 端指南）.md"
+    },
+    {
+      "id": "12560603821296",
+      "title": "如何为我的 Bitget 账户设置/修改防钓鱼码？（网页端指南）",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821296",
+      "published_at": "2025-01-17 02:30",
+      "file": "bitget_support/账户与安全/账户安全提示/如何为我的 Bitget 账户设置 - 修改防钓鱼码？（网页端指南）.md"
+    },
+    {
+      "id": "12560603821292",
+      "title": "如何为我的 Bitget 账户设置 PIN 码？- App 端指南",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821292",
+      "published_at": "2025-01-17 02:29",
+      "file": "bitget_support/账户与安全/账户安全提示/如何为我的 Bitget 账户设置 PIN 码？ - App 端指南.md"
+    },
+    {
+      "id": "12560603821291",
+      "title": "如何为我的 Bitget 账户设置 PIN 码？- 网页端指南",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821291",
+      "published_at": "2025-01-17 02:29",
+      "file": "bitget_support/账户与安全/账户安全提示/如何为我的 Bitget 账户设置 PIN 码？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603821290",
+      "title": "如何为我的 Bitget 账户设置通行密钥？- App 端指南",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821290",
+      "published_at": "2025-01-17 02:29",
+      "file": "bitget_support/账户与安全/账户安全提示/如何为我的 Bitget 账户设置通行密钥？ - App 端指南.md"
+    },
+    {
+      "id": "12560603821289",
+      "title": "如何为我的 Bitget 账户设置通行密钥？- 网页端指南",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821289",
+      "published_at": "2025-01-17 02:29",
+      "file": "bitget_support/账户与安全/账户安全提示/如何为我的 Bitget 账户设置通行密钥？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603821294",
+      "title": "如何修改/重置/停用 Bitget 账户的 PIN 码？- App 端指南",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821294",
+      "published_at": "2025-01-17 02:29",
+      "file": "bitget_support/账户与安全/账户安全提示/如何修改 - 重置 - 停用 Bitget 账户的 PIN 码？ - App 端指南.md"
+    },
+    {
+      "id": "12560603821293",
+      "title": "如何修改/重置/停用 Bitget 账户的 PIN 码？（网页端指南）",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821293",
+      "published_at": "2025-01-17 02:29",
+      "file": "bitget_support/账户与安全/账户安全提示/如何修改 - 重置 - 停用 Bitget 账户的 PIN 码？（网页端指南）.md"
+    },
+    {
+      "id": "12560603820577",
+      "title": "如何在 Bitget 完成 RFI？",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820577",
+      "published_at": "2025-01-16 05:02",
+      "file": "bitget_support/账户与安全/账户安全提示/如何在 Bitget 完成 RFI？.md"
+    },
+    {
+      "id": "12560603819184",
+      "title": "如何录制验证视频？",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603819184",
+      "published_at": "2024-12-03 05:53",
+      "file": "bitget_support/账户与安全/账户安全提示/如何录制验证视频？.md"
+    },
+    {
+      "id": "12560603826152",
+      "title": "如何验证 Bitget 官方渠道并举报可疑链接？",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603826152",
+      "published_at": "2025-07-29 03:25",
+      "file": "bitget_support/账户与安全/账户安全提示/如何验证 Bitget 官方渠道并举报可疑链接？.md"
+    },
+    {
+      "id": "12560603821285",
+      "title": "如果上当受骗，我该采取哪些措施？",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821285",
+      "published_at": "2025-01-17 02:28",
+      "file": "bitget_support/账户与安全/账户安全提示/如果上当受骗，我该采取哪些措施？.md"
+    },
+    {
+      "id": "12560603821284",
+      "title": "如果我的账户被黑客入侵，我该怎么办？",
+      "category": "账户与安全",
+      "section": "账户安全提示",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821284",
+      "published_at": "2025-01-17 02:28",
+      "file": "bitget_support/账户与安全/账户安全提示/如果我的账户被黑客入侵，我该怎么办？.md"
+    },
+    {
+      "id": "12560603821829",
+      "title": "如何为我的 Bitget 账户启用谷歌验证器？ - App 指南",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821829",
+      "published_at": "2025-01-23 03:30",
+      "file": "bitget_support/账户与安全/账户设置/如何为我的 Bitget 账户启用谷歌验证器？ - App 指南.md"
+    },
+    {
+      "id": "12560603821828",
+      "title": "如何为我的 Bitget 账户启用谷歌验证器？ - 网页端指南",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821828",
+      "published_at": "2025-01-23 03:26",
+      "file": "bitget_support/账户与安全/账户设置/如何为我的 Bitget 账户启用谷歌验证器？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603821835",
+      "title": "如何修改 Bitget 账户的邮箱地址？- 网页端指南",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821835",
+      "published_at": "2025-01-23 03:47",
+      "file": "bitget_support/账户与安全/账户设置/如何修改 Bitget 账户的邮箱地址？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603827448",
+      "title": "如何在 Bitget 上创建子账户？",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603827448",
+      "published_at": "2025-05-15 08:27",
+      "file": "bitget_support/账户与安全/账户设置/如何在 Bitget 上创建子账户？.md"
+    },
+    {
+      "id": "12560603807454",
+      "title": "如何在 Bitget 上更改个人头像、展示名和用户名？",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603807454",
+      "published_at": "2024-03-29 08:59",
+      "file": "bitget_support/账户与安全/账户设置/如何在 Bitget 上更改个人头像、展示名和用户名？.md"
+    },
+    {
+      "id": "12560603825737",
+      "title": "如何将手机号码绑定到 Bitget 账户？- App 端指南",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603825737",
+      "published_at": "2025-04-18 03:29",
+      "file": "bitget_support/账户与安全/账户设置/如何将手机号码绑定到 Bitget 账户？ - App 端指南.md"
+    },
+    {
+      "id": "12560603825740",
+      "title": "如何将手机号码绑定到 Bitget 账户？- 网页端指南",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603825740",
+      "published_at": "2025-04-16 10:40",
+      "file": "bitget_support/账户与安全/账户设置/如何将手机号码绑定到 Bitget 账户？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603821831",
+      "title": "如何更改 Bitget 账户的谷歌验证器？——App 端操作指南",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821831",
+      "published_at": "2025-01-23 03:40",
+      "file": "bitget_support/账户与安全/账户设置/如何更改 Bitget 账户的谷歌验证器？——App 端操作指南.md"
+    },
+    {
+      "id": "12560603821830",
+      "title": "如何更改 Bitget 账户的谷歌验证器？——网站端操作指南",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821830",
+      "published_at": "2025-01-23 03:33",
+      "file": "bitget_support/账户与安全/账户设置/如何更改 Bitget 账户的谷歌验证器？——网站端操作指南.md"
+    },
+    {
+      "id": "12560603821836",
+      "title": "如何更改 Bitget 账户的邮箱地址？- App 端指南",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821836",
+      "published_at": "2025-01-23 03:53",
+      "file": "bitget_support/账户与安全/账户设置/如何更改 Bitget 账户的邮箱地址？ - App 端指南.md"
+    },
+    {
+      "id": "12560603845881",
+      "title": "如何通过 Bitget 官网停用或解锁您的账户？",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603845881",
+      "published_at": "2025-12-17 02:39",
+      "file": "bitget_support/账户与安全/账户设置/如何通过 Bitget 官网停用或解锁您的账户？.md"
+    },
+    {
+      "id": "12560603821834",
+      "title": "如何重置 Bitget 账户的手机号？- App 端指南",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821834",
+      "published_at": "2025-01-23 03:44",
+      "file": "bitget_support/账户与安全/账户设置/如何重置 Bitget 账户的手机号？ - App 端指南.md"
+    },
+    {
+      "id": "12560603821832",
+      "title": "如何重置 Bitget 账户的手机号？- 网页端指南",
+      "category": "账户与安全",
+      "section": "账户设置",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821832",
+      "published_at": "2025-01-23 03:42",
+      "file": "bitget_support/账户与安全/账户设置/如何重置 Bitget 账户的手机号？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603821282",
+      "title": "如何处理未收到验证短信的情况？",
+      "category": "账户与安全",
+      "section": "账户问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821282",
+      "published_at": "2025-01-17 02:27",
+      "file": "bitget_support/账户与安全/账户问题排除/如何处理未收到验证短信的情况？.md"
+    },
+    {
+      "id": "12560603821281",
+      "title": "如何处理未收到验证邮件的情况？",
+      "category": "账户与安全",
+      "section": "账户问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821281",
+      "published_at": "2025-01-17 02:27",
+      "file": "bitget_support/账户与安全/账户问题排除/如何处理未收到验证邮件的情况？.md"
+    },
+    {
+      "id": "12560603824633",
+      "title": "如何找回无法访问的 Bitget 账户？",
+      "category": "账户与安全",
+      "section": "账户问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603824633",
+      "published_at": "2025-03-26 10:43",
+      "file": "bitget_support/账户与安全/账户问题排除/如何找回无法访问的 Bitget 账户？.md"
+    },
+    {
+      "id": "12560603821283",
+      "title": "当多个安全项丢失时，如何重置安全项？",
+      "category": "账户与安全",
+      "section": "账户问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603821283",
+      "published_at": "2025-01-17 02:28",
+      "file": "bitget_support/账户与安全/账户问题排除/当多个安全项丢失时，如何重置安全项？.md"
+    },
+    {
+      "id": "12560603808893",
+      "title": "个人身份认证常见问题",
+      "category": "身份认证",
+      "section": "个人认证",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603808893",
+      "published_at": "2024-04-26 10:49",
+      "file": "bitget_support/身份认证/个人认证/个人身份认证常见问题.md"
+    },
+    {
+      "id": "12560603853145",
+      "title": "如何上传地址证明？",
+      "category": "身份认证",
+      "section": "个人认证",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603853145",
+      "published_at": "2026-02-12 10:56",
+      "file": "bitget_support/身份认证/个人认证/如何上传地址证明？.md"
+    },
+    {
+      "id": "12560603808921",
+      "title": "如何完成 Bitget 账户的身份认证？- 网页端指南",
+      "category": "身份认证",
+      "section": "个人认证",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603808921",
+      "published_at": "2024-04-29 02:55",
+      "file": "bitget_support/身份认证/个人认证/如何完成 Bitget 账户的身份认证？ - 网页端指南.md"
+    },
+    {
+      "id": "12560603809092",
+      "title": "如何完成 Bitget 账户的身份认证？——App 端指南",
+      "category": "身份认证",
+      "section": "个人认证",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603809092",
+      "published_at": "2024-04-30 13:56",
+      "file": "bitget_support/身份认证/个人认证/如何完成 Bitget 账户的身份认证？——App 端指南.md"
+    },
+    {
+      "id": "12560603849340",
+      "title": "加强尽职调查（EDD）常见问题",
+      "category": "身份认证",
+      "section": "加强尽职调查",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603849340",
+      "published_at": "2026-01-27 09:32",
+      "file": "bitget_support/身份认证/加强尽职调查/加强尽职调查（EDD）常见问题.md"
+    },
+    {
+      "id": "12560603849337",
+      "title": "如何完成 Bitget 账户的加强尽职调查（EDD）？——App 端指南",
+      "category": "身份认证",
+      "section": "加强尽职调查",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603849337",
+      "published_at": "2026-01-27 09:27",
+      "file": "bitget_support/身份认证/加强尽职调查/如何完成 Bitget 账户的加强尽职调查（EDD）？——App 端指南.md"
+    },
+    {
+      "id": "12560603849333",
+      "title": "如何完成 Bitget 账户的加强尽职调查（EDD）？——网页端指南",
+      "category": "身份认证",
+      "section": "加强尽职调查",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603849333",
+      "published_at": "2026-01-27 09:12",
+      "file": "bitget_support/身份认证/加强尽职调查/如何完成 Bitget 账户的加强尽职调查（EDD）？——网页端指南.md"
+    },
+    {
+      "id": "12560603820575",
+      "title": "Bitget 账户提交企业认证需要哪些文件？",
+      "category": "身份认证",
+      "section": "机构认证",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603820575",
+      "published_at": "2024-12-30 07:55",
+      "file": "bitget_support/身份认证/机构认证/Bitget 账户提交企业认证需要哪些文件？.md"
+    },
+    {
+      "id": "12560603803363",
+      "title": "KYB 常见问题：企业认证",
+      "category": "身份认证",
+      "section": "机构认证",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603803363",
+      "published_at": "2024-01-11 06:28",
+      "file": "bitget_support/身份认证/机构认证/KYB 常见问题：企业认证.md"
+    },
+    {
+      "id": "12560603802558",
+      "title": "如何完成 Bitget 账户的企业认证（KYB）？",
+      "category": "身份认证",
+      "section": "机构认证",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603802558",
+      "published_at": "2023-12-22 03:51",
+      "file": "bitget_support/身份认证/机构认证/如何完成 Bitget 账户的企业认证（KYB）？.md"
+    },
+    {
+      "id": "12560603808909",
+      "title": "身份认证失败的常见原因有哪些？",
+      "category": "身份认证",
+      "section": "认证问题排除",
+      "source_url": "https://www.bitget.com/zh-CN/support/articles/12560603808909",
+      "published_at": "2024-04-27 11:44",
+      "file": "bitget_support/身份认证/认证问题排除/身份认证失败的常见原因有哪些？.md"
+    }
+  ],
+  "errors": []
+}
