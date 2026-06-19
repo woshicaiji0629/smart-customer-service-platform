@@ -1,3 +1,10 @@
 # Frontend
 
-React 前端将在后续阶段初始化。本阶段优先搭建 Python 后端。
+智能客服用户端，使用 React、TypeScript 和 Vite。
+
+```bash
+npm install
+npm run dev
+```
+
+默认开发地址为 `http://localhost:5173`。

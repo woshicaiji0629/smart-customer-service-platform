@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -27,6 +28,12 @@ from customer_service.knowledge.chat import (
 from customer_service.knowledge.rag import RagCitationError, RagService
 from customer_service.knowledge.repository import MAX_SEARCH_LIMIT, KnowledgeRepository
 from customer_service.knowledge.service import KnowledgeSearchService
+
+
+LOCAL_FRONTEND_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
 
 @asynccontextmanager
@@ -79,6 +86,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Smart Customer Service API", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=LOCAL_FRONTEND_ORIGINS,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+)
 app.include_router(conversation_router)
 
 
