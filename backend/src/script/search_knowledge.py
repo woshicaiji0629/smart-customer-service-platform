@@ -13,6 +13,7 @@ from customer_service.knowledge.embeddings import (
     DashScopeEmbeddingClient,
 )
 from customer_service.knowledge.repository import KnowledgeRepository
+from customer_service.knowledge.service import KnowledgeSearchService
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,8 +34,11 @@ async def run(args: argparse.Namespace) -> None:
             model=DEFAULT_MODEL,
             dimensions=DEFAULT_DIMENSIONS,
         ) as embedding_client:
-            query_vector = (await embedding_client.embed([args.query]))[0]
-        results = await repository.search(query_vector, limit=args.limit)
+            service = KnowledgeSearchService(
+                repository=repository,
+                embedding_client=embedding_client,
+            )
+            results = await service.search(args.query, limit=args.limit)
     finally:
         await repository.close()
 
