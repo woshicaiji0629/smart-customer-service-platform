@@ -2,12 +2,14 @@ import asyncio
 import json
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from customer_service.knowledge.chat import DashScopeChatClient
 from customer_service.knowledge.rag import (
     NO_KNOWLEDGE_ANSWER,
     RagAnswer,
+    RagCitationError,
     RagService,
     RagSource,
 )
@@ -61,6 +63,16 @@ class FakeChatClient:
     async def complete(self, messages: list[dict[str, str]]) -> str:
         self.messages = messages
         return "请先使用 TxID 查询链上状态。[资料 1]"
+
+
+class SequencedChatClient:
+    def __init__(self, responses: list[str]) -> None:
+        self._responses = iter(responses)
+        self.requests: list[list[dict[str, str]]] = []
+
+    async def complete(self, messages: list[dict[str, str]]) -> str:
+        self.requests.append(messages.copy())
+        return next(self._responses)
 
 
 def test_chat_client_calls_compatible_api() -> None:
@@ -170,6 +182,43 @@ def test_rag_service_skips_chat_when_results_are_below_threshold() -> None:
     assert chat_client.messages == []
 
 
+def test_rag_service_retries_answer_with_invalid_citation() -> None:
+    chat_client = SequencedChatClient(
+        [
+            "请查询链上状态。[资料 3]",
+            "请查询链上状态。[资料 1]",
+        ]
+    )
+    service = RagService(
+        search_service=FakeSearchService(),  # type: ignore[arg-type]
+        chat_client=chat_client,  # type: ignore[arg-type]
+    )
+
+    result = asyncio.run(service.answer("提现没有到账"))
+
+    assert result.answer == "请查询链上状态。[资料 1]"
+    assert len(chat_client.requests) == 2
+    assert "不存在的资料编号：3" in chat_client.requests[1][-1]["content"]
+
+
+def test_rag_service_rejects_invalid_citation_after_retry() -> None:
+    chat_client = SequencedChatClient(
+        [
+            "错误引用。[资料 3]",
+            "仍然错误。[资料 4]",
+        ]
+    )
+    service = RagService(
+        search_service=FakeSearchService(),  # type: ignore[arg-type]
+        chat_client=chat_client,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(RagCitationError, match="无效资料编号: 4"):
+        asyncio.run(service.answer("提现没有到账"))
+
+    assert len(chat_client.requests) == 2
+
+
 def test_rag_api_returns_answer_and_sources() -> None:
     class FakeRagService:
         async def answer(self, question: str) -> RagAnswer:
@@ -205,3 +254,21 @@ def test_rag_api_returns_answer_and_sources() -> None:
             }
         ],
     }
+
+
+def test_rag_api_returns_502_for_invalid_citations() -> None:
+    class InvalidCitationRagService:
+        async def answer(self, question: str) -> RagAnswer:
+            raise RagCitationError("回答包含无效资料编号: 3")
+
+    app.dependency_overrides[get_rag_service] = lambda: InvalidCitationRagService()
+    try:
+        response = TestClient(app).post(
+            "/knowledge/answer",
+            json={"question": "提现未到账"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "大模型引用校验失败"}

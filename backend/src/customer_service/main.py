@@ -21,7 +21,7 @@ from customer_service.knowledge.chat import (
     ChatCompletionError,
     DashScopeChatClient,
 )
-from customer_service.knowledge.rag import RagService
+from customer_service.knowledge.rag import RagCitationError, RagService
 from customer_service.knowledge.repository import MAX_SEARCH_LIMIT, KnowledgeRepository
 from customer_service.knowledge.service import KnowledgeSearchService
 
@@ -213,6 +213,11 @@ async def answer_from_knowledge(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="大模型服务请求失败",
+        ) from exc
+    except RagCitationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="大模型引用校验失败",
         ) from exc
     except SQLAlchemyError as exc:
         raise HTTPException(
