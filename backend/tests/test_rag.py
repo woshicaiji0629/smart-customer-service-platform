@@ -144,6 +144,32 @@ def test_rag_service_skips_chat_when_search_has_no_results() -> None:
     assert chat_client.messages == []
 
 
+def test_rag_service_skips_chat_when_results_are_below_threshold() -> None:
+    class LowScoreSearchService:
+        async def search(self, query: str, *, limit: int = 5) -> list[SearchResult]:
+            return [
+                SearchResult(
+                    article_id="unrelated",
+                    title="弱相关资料",
+                    source_url="https://example.com/unrelated",
+                    heading=None,
+                    content="弱相关内容",
+                    score=0.5999,
+                )
+            ]
+
+    chat_client = FakeChatClient()
+    service = RagService(
+        search_service=LowScoreSearchService(),  # type: ignore[arg-type]
+        chat_client=chat_client,  # type: ignore[arg-type]
+    )
+
+    result = asyncio.run(service.answer("知识库之外的问题"))
+
+    assert result == RagAnswer(answer=NO_KNOWLEDGE_ANSWER, sources=[])
+    assert chat_client.messages == []
+
+
 def test_rag_api_returns_answer_and_sources() -> None:
     class FakeRagService:
         async def answer(self, question: str) -> RagAnswer:

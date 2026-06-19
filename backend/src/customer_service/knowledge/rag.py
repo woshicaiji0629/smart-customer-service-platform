@@ -11,6 +11,7 @@ from customer_service.knowledge.service import KnowledgeSearchService
 
 
 DEFAULT_RAG_SEARCH_LIMIT: Final = 5
+DEFAULT_RAG_MIN_SCORE: Final = 0.60
 NO_KNOWLEDGE_ANSWER: Final = "未在知识库中找到可用于回答该问题的资料。"
 SYSTEM_PROMPT: Final = """你是交易所客服知识库助手。
 只能根据用户消息中提供的参考资料回答，不得补充资料之外的事实。
@@ -38,19 +39,27 @@ class RagService:
         *,
         search_service: KnowledgeSearchService,
         chat_client: DashScopeChatClient,
+        min_score: float = DEFAULT_RAG_MIN_SCORE,
     ) -> None:
+        if not -1 <= min_score <= 1:
+            raise ValueError("min_score 必须在 -1 到 1 之间")
         self._search_service = search_service
         self._chat_client = chat_client
+        self._min_score = min_score
 
     async def answer(self, question: str) -> RagAnswer:
         normalized_question = question.strip()
         if not normalized_question:
             raise ValueError("question 不能为空")
 
-        results = await self._search_service.search(
-            normalized_question,
-            limit=DEFAULT_RAG_SEARCH_LIMIT,
-        )
+        results = [
+            result
+            for result in await self._search_service.search(
+                normalized_question,
+                limit=DEFAULT_RAG_SEARCH_LIMIT,
+            )
+            if result.score >= self._min_score
+        ]
         if not results:
             return RagAnswer(answer=NO_KNOWLEDGE_ANSWER, sources=[])
 
