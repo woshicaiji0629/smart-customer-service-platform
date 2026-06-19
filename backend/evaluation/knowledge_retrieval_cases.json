@@ -1,0 +1,94 @@
+{
+  "cases": [
+    {
+      "id": "withdrawal_not_received",
+      "kind": "positive",
+      "query": "提现显示完成了，但接收钱包一直没有到账怎么办？",
+      "expected_article_ids": ["12560603820649"]
+    },
+    {
+      "id": "deposit_not_received",
+      "kind": "positive",
+      "query": "我从别的平台充币到 Bitget 后一直没有到账",
+      "expected_article_ids": ["12560603807342", "12560603811938"]
+    },
+    {
+      "id": "find_txid",
+      "kind": "positive",
+      "query": "在哪里可以查看一笔转账的 TxID？",
+      "expected_article_ids": ["12560603820704"]
+    },
+    {
+      "id": "assets_frozen",
+      "kind": "positive",
+      "query": "为什么我账户中的资产被冻结了？",
+      "expected_article_ids": ["12560603820705"]
+    },
+    {
+      "id": "limit_order_not_filled",
+      "kind": "positive",
+      "query": "我挂的限价单为什么一直没有成交？",
+      "expected_article_ids": ["12560603820581"]
+    },
+    {
+      "id": "market_and_limit_orders",
+      "kind": "positive",
+      "query": "市价单和限价单有什么区别？",
+      "expected_article_ids": ["12560603820642"]
+    },
+    {
+      "id": "phishing_link",
+      "kind": "positive",
+      "query": "收到一个可疑的 Bitget 链接，怎么判断是不是钓鱼？",
+      "expected_article_ids": ["12560603821287", "12560603826152"]
+    },
+    {
+      "id": "account_hacked",
+      "kind": "positive",
+      "query": "我的账户可能被黑客入侵了，应该立即做什么？",
+      "expected_article_ids": ["12560603821284"]
+    },
+    {
+      "id": "identity_verification_failed",
+      "kind": "positive",
+      "query": "实名认证一直失败，常见原因有哪些？",
+      "expected_article_ids": ["12560603808909"]
+    },
+    {
+      "id": "kyb_documents",
+      "kind": "positive",
+      "query": "企业认证需要提前准备哪些资料？",
+      "expected_article_ids": ["12560603820575"]
+    },
+    {
+      "id": "reset_password",
+      "kind": "positive",
+      "query": "忘记 Bitget 登录密码后怎么重置？",
+      "expected_article_ids": ["12560603821821", "12560603821823"]
+    },
+    {
+      "id": "verification_sms_missing",
+      "kind": "positive",
+      "query": "登录时一直收不到手机验证码怎么办？",
+      "expected_article_ids": ["12560603821282"]
+    },
+    {
+      "id": "weather_question",
+      "kind": "out_of_domain",
+      "query": "上海明天天气怎么样？",
+      "expected_article_ids": []
+    },
+    {
+      "id": "programming_question",
+      "kind": "out_of_domain",
+      "query": "怎么用 Python 编写一个 FastAPI 接口？",
+      "expected_article_ids": []
+    },
+    {
+      "id": "price_prediction",
+      "kind": "out_of_domain",
+      "query": "比特币明天会涨还是会跌？",
+      "expected_article_ids": []
+    }
+  ]
+}
