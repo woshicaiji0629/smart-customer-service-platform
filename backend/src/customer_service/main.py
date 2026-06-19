@@ -9,6 +9,9 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 
+from customer_service.conversations.api import router as conversation_router
+from customer_service.conversations.repository import ConversationRepository
+from customer_service.conversations.service import ConversationService
 from customer_service.knowledge.embeddings import (
     DEFAULT_BASE_URL,
     DEFAULT_DIMENSIONS,
@@ -30,6 +33,7 @@ from customer_service.knowledge.service import KnowledgeSearchService
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.knowledge_search_service = None
     app.state.rag_service = None
+    app.state.conversation_service = None
     database_url = os.getenv("DATABASE_URL")
     api_key = os.getenv("DASHSCOPE_API_KEY")
     if not database_url or not api_key:
@@ -37,6 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         return
 
     repository = KnowledgeRepository(database_url)
+    conversation_repository = ConversationRepository(database_url)
     try:
         base_url = os.getenv("DASHSCOPE_BASE_URL", DEFAULT_BASE_URL)
         async with (
@@ -60,14 +65,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 search_service=app.state.knowledge_search_service,
                 chat_client=chat_client,
             )
+            app.state.conversation_service = ConversationService(
+                repository=conversation_repository,
+                rag_service=app.state.rag_service,
+            )
             yield
     finally:
         app.state.knowledge_search_service = None
         app.state.rag_service = None
+        app.state.conversation_service = None
+        await conversation_repository.close()
         await repository.close()
 
 
 app = FastAPI(title="Smart Customer Service API", lifespan=lifespan)
+app.include_router(conversation_router)
 
 
 class KnowledgeSearchRequest(BaseModel):

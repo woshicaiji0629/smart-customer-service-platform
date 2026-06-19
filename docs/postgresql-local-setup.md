@@ -122,14 +122,24 @@ export DASHSCOPE_API_KEY='百炼 API Key'
 
 如果密码包含 `@`、`:`、`/`、`#` 等保留字符，需要先对密码进行 URL 编码。不要将数据库密码或 API Key 写入仓库。
 
-## 7. 创建业务表
+## 7. 初始化数据库结构
 
-业务表由项目代码管理，不需要手工编写建表 SQL。首次执行知识库构建命令时，程序会：
+业务表由项目代码管理，不需要手工编写建表 SQL。设置 `DATABASE_URL` 后执行：
+
+```bash
+cd backend
+uv run python -m script.init_database
+```
+
+初始化脚本会：
 
 1. 执行 `CREATE EXTENSION IF NOT EXISTS vector`。
 2. 创建 `knowledge_documents` 表。
 3. 创建 `knowledge_chunks` 表。
-4. 构建并写入知识库索引。
+4. 创建 `conversations` 表。
+5. 创建 `messages` 表。
+
+然后构建并写入知识库索引：
 
 先同步依赖，再用少量文章验证：
 
@@ -145,6 +155,8 @@ uv run python -m script.build_knowledge_index --limit 3
 \dt
 \d knowledge_documents
 \d knowledge_chunks
+\d conversations
+\d messages
 ```
 
 确认少量数据构建正常后，再执行全量构建：
