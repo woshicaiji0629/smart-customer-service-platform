@@ -18,6 +18,117 @@ body {
   min-height: 100vh;
 }
 
+.app-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  width: min(1200px, 100%);
+  min-height: 100vh;
+  margin: 0 auto;
+}
+
+.conversation-sidebar {
+  min-width: 0;
+  padding: 24px 18px;
+  color: #eaf2ec;
+  background: #102f21;
+  border-left: 1px solid #0c2419;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.sidebar-eyebrow,
+.sidebar-header h2 {
+  margin: 0;
+}
+
+.sidebar-eyebrow {
+  color: #88a494;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.sidebar-header h2 {
+  margin-top: 3px;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.sidebar-header button {
+  padding: 9px 11px;
+  color: #173f2b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: #f0d59f;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sidebar-header button:disabled,
+.conversation-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.conversation-empty {
+  margin: 28px 4px 0;
+  color: #81978a;
+  font-size: 0.8rem;
+}
+
+.conversation-list {
+  display: flex;
+  margin-top: 24px;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.conversation-list button {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  color: #c7d6cc;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.conversation-list button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 5%);
+}
+
+.conversation-list button.is-active {
+  color: #fff;
+  background: #1c4932;
+  border-color: #37634a;
+}
+
+.conversation-list button span {
+  overflow: hidden;
+  width: 100%;
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-list time {
+  color: #839a8c;
+  font-size: 0.68rem;
+}
+
 button,
 textarea {
   font: inherit;
@@ -31,7 +142,7 @@ a {
 .app-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(920px, 100%);
+  width: 100%;
   min-height: 100vh;
   margin: 0 auto;
   background: #f8faf7;
@@ -106,6 +217,14 @@ a {
       transparent 39px,
       #dce4dc 40px
     );
+}
+
+.history-loading {
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  color: #6c776f;
+  font-size: 0.85rem;
 }
 
 .welcome-panel {
@@ -351,8 +470,30 @@ a {
 }
 
 @media (max-width: 640px) {
+  .app-layout {
+    display: block;
+  }
+
+  .conversation-sidebar {
+    padding: 14px 16px;
+    border-left: 0;
+  }
+
+  .conversation-list {
+    overflow-x: auto;
+    margin-top: 12px;
+    padding-bottom: 2px;
+    flex-direction: row;
+  }
+
+  .conversation-list button {
+    width: 190px;
+    flex: 0 0 auto;
+  }
+
   .app-shell {
     border: 0;
+    min-height: calc(100vh - 150px);
   }
 
   .app-header,

@@ -1,12 +1,29 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type SubmitEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   ApiError,
   createConversation,
+  getConversation,
   type Message,
   sendMessage,
 } from "./api/conversations";
 import "./App.css";
+
+const CONVERSATION_STORAGE_KEY = "smart-support-conversation-id";
+const CONVERSATION_LIST_STORAGE_KEY = "smart-support-conversations";
+const CONVERSATION_TITLE_LENGTH = 24;
+
+interface StoredConversation {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
 
 const SUGGESTED_QUESTIONS = [
   "提现完成但钱包没到账怎么办？",
@@ -22,19 +39,249 @@ function errorMessage(error: unknown): string {
   return "暂时无法连接客服服务，请稍后重试。";
 }
 
+function isStoredConversation(value: unknown): value is StoredConversation {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.title === "string" &&
+    typeof candidate.updatedAt === "string"
+  );
+}
+
+function readStoredConversations(): StoredConversation[] {
+  const stored = window.localStorage.getItem(CONVERSATION_LIST_STORAGE_KEY);
+  if (!stored) {
+    return [];
+  }
+
+  const parsed: unknown = JSON.parse(stored);
+  if (!Array.isArray(parsed) || !parsed.every(isStoredConversation)) {
+    throw new Error("会话列表格式无效");
+  }
+
+  return parsed;
+}
+
+function titleFromMessages(messages: Message[]): string {
+  const firstQuestion = messages.find((message) => message.role === "user");
+  return firstQuestion ? titleFromQuestion(firstQuestion.content) : "空白会话";
+}
+
+function titleFromQuestion(question: string): string {
+  const normalized = question.trim().replace(/\s+/g, " ");
+  return normalized.length > CONVERSATION_TITLE_LENGTH
+    ? `${normalized.slice(0, CONVERSATION_TITLE_LENGTH)}…`
+    : normalized;
+}
+
+function upsertConversation(
+  conversations: StoredConversation[],
+  conversation: StoredConversation,
+): StoredConversation[] {
+  return [
+    conversation,
+    ...conversations.filter((item) => item.id !== conversation.id),
+  ].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+function formatUpdatedAt(updatedAt: string): string {
+  const date = new Date(updatedAt);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleString("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function App() {
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<StoredConversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [hasLoadedStorage, setHasLoadedStorage] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let isActive = true;
+
+    async function restoreConversation() {
+      let storedConversationId: string | null;
+      let storedConversations: StoredConversation[];
+
+      try {
+        storedConversations = readStoredConversations();
+        storedConversationId = window.localStorage.getItem(
+          CONVERSATION_STORAGE_KEY,
+        );
+      } catch {
+        if (isActive) {
+          setError("无法读取浏览器中的历史会话。");
+          setHasLoadedStorage(true);
+          setIsLoadingHistory(false);
+        }
+        return;
+      }
+
+      if (
+        storedConversationId &&
+        !storedConversations.some((item) => item.id === storedConversationId)
+      ) {
+        storedConversations = upsertConversation(storedConversations, {
+          id: storedConversationId,
+          title: "历史会话",
+          updatedAt: new Date(0).toISOString(),
+        });
+      }
+
+      setConversations(storedConversations);
+
+      if (!storedConversationId) {
+        setHasLoadedStorage(true);
+        setIsLoadingHistory(false);
+        return;
+      }
+
+      setConversationId(storedConversationId);
+
+      try {
+        const history = await getConversation(storedConversationId);
+        if (isActive) {
+          setMessages(history.messages);
+          setConversations((current) =>
+            upsertConversation(current, {
+              id: history.id,
+              title: titleFromMessages(history.messages),
+              updatedAt: history.updated_at,
+            }),
+          );
+        }
+      } catch (requestError) {
+        if (!isActive) {
+          return;
+        }
+
+        if (requestError instanceof ApiError && requestError.status === 404) {
+          setConversationId(null);
+          setConversations((current) =>
+            current.filter((item) => item.id !== storedConversationId),
+          );
+        } else {
+          setError(errorMessage(requestError));
+        }
+      } finally {
+        if (isActive) {
+          setHasLoadedStorage(true);
+          setIsLoadingHistory(false);
+        }
+      }
+    }
+
+    void restoreConversation();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedStorage) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        CONVERSATION_LIST_STORAGE_KEY,
+        JSON.stringify(conversations),
+      );
+    } catch {
+      setError("无法在浏览器中保存会话列表。");
+    }
+  }, [conversations, hasLoadedStorage]);
+
+  useEffect(() => {
+    if (!hasLoadedStorage) {
+      return;
+    }
+
+    try {
+      if (conversationId) {
+        window.localStorage.setItem(
+          CONVERSATION_STORAGE_KEY,
+          conversationId,
+        );
+      } else {
+        window.localStorage.removeItem(CONVERSATION_STORAGE_KEY);
+      }
+    } catch {
+      setError("无法在浏览器中保存当前会话。");
+    }
+  }, [conversationId, hasLoadedStorage]);
+
+  useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isSending]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleNewConversation() {
+    if (isLoadingHistory || isSending) {
+      return;
+    }
+
+    setConversationId(null);
+    setMessages([]);
+    setInput("");
+    setError(null);
+  }
+
+  async function handleSelectConversation(selectedConversationId: string) {
+    if (
+      selectedConversationId === conversationId ||
+      isLoadingHistory ||
+      isSending
+    ) {
+      return;
+    }
+
+    setError(null);
+    setIsLoadingHistory(true);
+
+    try {
+      const history = await getConversation(selectedConversationId);
+      setConversationId(history.id);
+      setMessages(history.messages);
+      setConversations((current) =>
+        upsertConversation(current, {
+          id: history.id,
+          title: titleFromMessages(history.messages),
+          updatedAt: history.updated_at,
+        }),
+      );
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 404) {
+        setConversations((current) =>
+          current.filter((item) => item.id !== selectedConversationId),
+        );
+        setError("该历史会话已不存在。");
+      } else {
+        setError(errorMessage(requestError));
+      }
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }
+
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const question = input.trim();
 
@@ -63,6 +310,13 @@ export function App() {
         const conversation = await createConversation();
         activeConversationId = conversation.id;
         setConversationId(activeConversationId);
+        setConversations((current) =>
+          upsertConversation(current, {
+            id: conversation.id,
+            title: titleFromQuestion(question),
+            updatedAt: conversation.updated_at,
+          }),
+        );
       }
 
       const turn = await sendMessage(activeConversationId, question);
@@ -71,6 +325,16 @@ export function App() {
         turn.user_message,
         turn.assistant_message,
       ]);
+      setConversations((current) => {
+        const existing = current.find(
+          (conversation) => conversation.id === activeConversationId,
+        );
+        return upsertConversation(current, {
+          id: activeConversationId,
+          title: existing?.title ?? titleFromQuestion(question),
+          updatedAt: turn.assistant_message.created_at,
+        });
+      });
     } catch (requestError) {
       setMessages((current) =>
         current.filter((message) => message.id !== pendingId),
@@ -90,7 +354,46 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
+    <div className="app-layout">
+      <aside className="conversation-sidebar" aria-label="会话管理">
+        <div className="sidebar-header">
+          <div>
+            <p className="sidebar-eyebrow">CONVERSATIONS</p>
+            <h2>会话</h2>
+          </div>
+          <button
+            type="button"
+            onClick={handleNewConversation}
+            disabled={isLoadingHistory || isSending}
+          >
+            新建会话
+          </button>
+        </div>
+        {conversations.length === 0 ? (
+          <p className="conversation-empty">暂无历史会话</p>
+        ) : (
+          <nav className="conversation-list" aria-label="历史会话">
+            {conversations.map((conversation) => (
+              <button
+                className={
+                  conversation.id === conversationId ? "is-active" : undefined
+                }
+                type="button"
+                key={conversation.id}
+                onClick={() => void handleSelectConversation(conversation.id)}
+                disabled={isLoadingHistory || isSending}
+              >
+                <span>{conversation.title}</span>
+                <time dateTime={conversation.updatedAt}>
+                  {formatUpdatedAt(conversation.updatedAt)}
+                </time>
+              </button>
+            ))}
+          </nav>
+        )}
+      </aside>
+
+      <main className="app-shell">
       <header className="app-header">
         <div className="brand-mark" aria-hidden="true">
           S
@@ -105,7 +408,11 @@ export function App() {
       </header>
 
       <section className="conversation" aria-label="客服对话">
-        {messages.length === 0 ? (
+        {isLoadingHistory ? (
+          <div className="history-loading" role="status">
+            正在恢复历史会话…
+          </div>
+        ) : messages.length === 0 ? (
           <div className="welcome-panel">
             <p className="welcome-icon" aria-hidden="true">
               24/7
@@ -177,19 +484,22 @@ export function App() {
             rows={1}
             maxLength={4000}
             value={input}
-            disabled={isSending}
+            disabled={isLoadingHistory || isSending}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
           />
           <button
             type="submit"
-            disabled={isSending || input.trim().length === 0}
+            disabled={
+              isLoadingHistory || isSending || input.trim().length === 0
+            }
           >
             {isSending ? "发送中" : "发送"}
           </button>
         </form>
         <p className="composer-hint">Enter 发送 · Shift + Enter 换行</p>
       </footer>
-    </main>
+      </main>
+    </div>
   );
 }
