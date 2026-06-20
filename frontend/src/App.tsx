@@ -7,8 +7,10 @@ import {
 } from "react";
 
 import {
+  type ConversationSummary,
   createConversation,
   getConversation,
+  listConversations,
   type Message,
   sendMessage,
 } from "./api/conversations";
@@ -24,14 +26,8 @@ import { ApiError } from "./api/client";
 import "./App.css";
 
 const CONVERSATION_STORAGE_KEY_PREFIX = "smart-support-conversation-id";
-const CONVERSATION_LIST_STORAGE_KEY_PREFIX = "smart-support-conversations";
 const CONVERSATION_TITLE_LENGTH = 24;
-
-interface StoredConversation {
-  id: string;
-  title: string;
-  updatedAt: string;
-}
+const CONVERSATION_PAGE_SIZE = 20;
 
 const SUGGESTED_QUESTIONS = [
   "提现完成但钱包没到账怎么办？",
@@ -47,42 +43,8 @@ function errorMessage(error: unknown): string {
   return "暂时无法连接客服服务，请稍后重试。";
 }
 
-function isStoredConversation(value: unknown): value is StoredConversation {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.id === "string" &&
-    typeof candidate.title === "string" &&
-    typeof candidate.updatedAt === "string"
-  );
-}
-
 function userStorageKey(prefix: string, userId: string): string {
   return `${prefix}:${userId}`;
-}
-
-function readStoredConversations(userId: string): StoredConversation[] {
-  const stored = window.localStorage.getItem(
-    userStorageKey(CONVERSATION_LIST_STORAGE_KEY_PREFIX, userId),
-  );
-  if (!stored) {
-    return [];
-  }
-
-  const parsed: unknown = JSON.parse(stored);
-  if (!Array.isArray(parsed) || !parsed.every(isStoredConversation)) {
-    throw new Error("会话列表格式无效");
-  }
-
-  return parsed;
-}
-
-function titleFromMessages(messages: Message[]): string {
-  const firstQuestion = messages.find((message) => message.role === "user");
-  return firstQuestion ? titleFromQuestion(firstQuestion.content) : "空白会话";
 }
 
 function titleFromQuestion(question: string): string {
@@ -92,14 +54,34 @@ function titleFromQuestion(question: string): string {
     : normalized;
 }
 
+function titleFromMessages(messages: Message[]): string {
+  const firstQuestion = messages.find((message) => message.role === "user");
+  return firstQuestion ? titleFromQuestion(firstQuestion.content) : "空白会话";
+}
+
 function upsertConversation(
-  conversations: StoredConversation[],
-  conversation: StoredConversation,
-): StoredConversation[] {
+  conversations: ConversationSummary[],
+  conversation: ConversationSummary,
+): ConversationSummary[] {
   return [
     conversation,
     ...conversations.filter((item) => item.id !== conversation.id),
-  ].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  ].sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+}
+
+function appendConversations(
+  conversations: ConversationSummary[],
+  additionalConversations: ConversationSummary[],
+): ConversationSummary[] {
+  const existingIds = new Set(
+    conversations.map((conversation) => conversation.id),
+  );
+  return [
+    ...conversations,
+    ...additionalConversations.filter(
+      (conversation) => !existingIds.has(conversation.id),
+    ),
+  ];
 }
 
 function formatUpdatedAt(updatedAt: string): string {
@@ -126,7 +108,15 @@ export function App() {
   const [withdrawal, setWithdrawal] = useState<Withdrawal | null>(null);
   const [isLoadingWithdrawal, setIsLoadingWithdrawal] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [conversations, setConversations] = useState<StoredConversation[]>([]);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [nextConversationCursor, setNextConversationCursor] = useState<
+    string | null
+  >(null);
+  const [isLoadingMoreConversations, setIsLoadingMoreConversations] =
+    useState(false);
+  const [conversationListError, setConversationListError] = useState<
+    string | null
+  >(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [hasLoadedStorage, setHasLoadedStorage] = useState(false);
@@ -185,71 +175,65 @@ export function App() {
     setIsLoadingHistory(true);
     setConversationId(null);
     setConversations([]);
+    setNextConversationCursor(null);
+    setConversationListError(null);
     setMessages([]);
 
     async function restoreConversation() {
-      let storedConversationId: string | null;
-      let storedConversations: StoredConversation[];
+      let storedConversationId: string | null = null;
 
       try {
-        storedConversations = readStoredConversations(activeUser.user_id);
         storedConversationId = window.localStorage.getItem(
           userStorageKey(CONVERSATION_STORAGE_KEY_PREFIX, activeUser.user_id),
         );
       } catch {
         if (isActive) {
-          setError("无法读取浏览器中的历史会话。");
-          setHasLoadedStorage(true);
-          setIsLoadingHistory(false);
+          setError("无法读取浏览器中的当前会话。");
         }
-        return;
       }
-
-      if (
-        storedConversationId &&
-        !storedConversations.some((item) => item.id === storedConversationId)
-      ) {
-        storedConversations = upsertConversation(storedConversations, {
-          id: storedConversationId,
-          title: "历史会话",
-          updatedAt: new Date(0).toISOString(),
-        });
-      }
-
-      setConversations(storedConversations);
-
-      if (!storedConversationId) {
-        setHasLoadedStorage(true);
-        setIsLoadingHistory(false);
-        return;
-      }
-
-      setConversationId(storedConversationId);
 
       try {
-        const history = await getConversation(storedConversationId);
-        if (isActive) {
-          setMessages(history.messages);
-          setConversations((current) =>
-            upsertConversation(current, {
-              id: history.id,
-              title: titleFromMessages(history.messages),
-              updatedAt: history.updated_at,
-            }),
-          );
-        }
-      } catch (requestError) {
+        const result = await listConversations(CONVERSATION_PAGE_SIZE, null);
         if (!isActive) {
           return;
         }
+        setConversations(result.items);
+        setNextConversationCursor(result.next_cursor);
 
-        if (requestError instanceof ApiError && requestError.status === 404) {
+        if (!storedConversationId) {
           setConversationId(null);
-          setConversations((current) =>
-            current.filter((item) => item.id !== storedConversationId),
-          );
-        } else {
-          setError(errorMessage(requestError));
+          return;
+        }
+
+        setConversationId(storedConversationId);
+        const history = await getConversation(storedConversationId);
+        if (isActive) {
+          setMessages(history.messages);
+          if (!result.items.some((item) => item.id === history.id)) {
+            setConversations((current) =>
+              upsertConversation(current, {
+                id: history.id,
+                title: titleFromMessages(history.messages),
+                created_at: history.created_at,
+                updated_at: history.updated_at,
+              }),
+            );
+          }
+        }
+      } catch (requestError) {
+        if (isActive) {
+          if (
+            storedConversationId &&
+            requestError instanceof ApiError &&
+            requestError.status === 404
+          ) {
+            setConversationId(null);
+            setConversations((current) =>
+              current.filter((item) => item.id !== storedConversationId),
+            );
+          } else {
+            setConversationListError(errorMessage(requestError));
+          }
         }
       } finally {
         if (isActive) {
@@ -265,21 +249,6 @@ export function App() {
       isActive = false;
     };
   }, [user]);
-
-  useEffect(() => {
-    if (!hasLoadedStorage || !user) {
-      return;
-    }
-
-    try {
-      window.localStorage.setItem(
-        userStorageKey(CONVERSATION_LIST_STORAGE_KEY_PREFIX, user.user_id),
-        JSON.stringify(conversations),
-      );
-    } catch {
-      setError("无法在浏览器中保存会话列表。");
-    }
-  }, [conversations, hasLoadedStorage, user]);
 
   useEffect(() => {
     if (!hasLoadedStorage || !user) {
@@ -317,6 +286,27 @@ export function App() {
     setError(null);
   }
 
+  async function handleLoadMoreConversations() {
+    if (isLoadingMoreConversations || nextConversationCursor === null) {
+      return;
+    }
+
+    setIsLoadingMoreConversations(true);
+    setConversationListError(null);
+    try {
+      const result = await listConversations(
+        CONVERSATION_PAGE_SIZE,
+        nextConversationCursor,
+      );
+      setConversations((current) => appendConversations(current, result.items));
+      setNextConversationCursor(result.next_cursor);
+    } catch (requestError) {
+      setConversationListError(errorMessage(requestError));
+    } finally {
+      setIsLoadingMoreConversations(false);
+    }
+  }
+
   async function handleSelectConversation(selectedConversationId: string) {
     if (
       selectedConversationId === conversationId ||
@@ -333,13 +323,6 @@ export function App() {
       const history = await getConversation(selectedConversationId);
       setConversationId(history.id);
       setMessages(history.messages);
-      setConversations((current) =>
-        upsertConversation(current, {
-          id: history.id,
-          title: titleFromMessages(history.messages),
-          updatedAt: history.updated_at,
-        }),
-      );
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.status === 404) {
         setConversations((current) =>
@@ -387,7 +370,8 @@ export function App() {
           upsertConversation(current, {
             id: conversation.id,
             title: titleFromQuestion(question),
-            updatedAt: conversation.updated_at,
+            created_at: conversation.created_at,
+            updated_at: conversation.updated_at,
           }),
         );
       }
@@ -405,7 +389,8 @@ export function App() {
         return upsertConversation(current, {
           id: activeConversationId,
           title: existing?.title ?? titleFromQuestion(question),
-          updatedAt: turn.assistant_message.created_at,
+          created_at: existing?.created_at ?? turn.user_message.created_at,
+          updated_at: turn.assistant_message.created_at,
         });
       });
     } catch (requestError) {
@@ -446,6 +431,8 @@ export function App() {
       setUser(null);
       setConversationId(null);
       setConversations([]);
+      setNextConversationCursor(null);
+      setConversationListError(null);
       setMessages([]);
       setHasLoadedStorage(false);
       setWithdrawal(null);
@@ -524,24 +511,41 @@ export function App() {
         {conversations.length === 0 ? (
           <p className="conversation-empty">暂无历史会话</p>
         ) : (
-          <nav className="conversation-list" aria-label="历史会话">
-            {conversations.map((conversation) => (
+          <>
+            <nav className="conversation-list" aria-label="历史会话">
+              {conversations.map((conversation) => (
+                <button
+                  className={
+                    conversation.id === conversationId ? "is-active" : undefined
+                  }
+                  type="button"
+                  key={conversation.id}
+                  onClick={() => void handleSelectConversation(conversation.id)}
+                  disabled={isLoadingHistory || isSending}
+                >
+                  <span>{conversation.title}</span>
+                  <time dateTime={conversation.updated_at}>
+                    {formatUpdatedAt(conversation.updated_at)}
+                  </time>
+                </button>
+              ))}
+            </nav>
+            {nextConversationCursor !== null && (
               <button
-                className={
-                  conversation.id === conversationId ? "is-active" : undefined
-                }
+                className="load-more-conversations"
                 type="button"
-                key={conversation.id}
-                onClick={() => void handleSelectConversation(conversation.id)}
-                disabled={isLoadingHistory || isSending}
+                disabled={isLoadingMoreConversations}
+                onClick={() => void handleLoadMoreConversations()}
               >
-                <span>{conversation.title}</span>
-                <time dateTime={conversation.updatedAt}>
-                  {formatUpdatedAt(conversation.updatedAt)}
-                </time>
+                {isLoadingMoreConversations ? "正在加载…" : "加载更多"}
               </button>
-            ))}
-          </nav>
+            )}
+          </>
+        )}
+        {conversationListError && (
+          <p className="conversation-list-error" role="alert">
+            {conversationListError}
+          </p>
         )}
         <form className="business-query" onSubmit={handleWithdrawalQuery}>
           <p className="sidebar-eyebrow">MOCK BUSINESS</p>

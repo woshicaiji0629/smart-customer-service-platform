@@ -23,6 +23,15 @@ export interface Conversation {
   updated_at: string;
 }
 
+export interface ConversationSummary extends Conversation {
+  title: string;
+}
+
+export interface ConversationList {
+  items: ConversationSummary[];
+  next_cursor: string | null;
+}
+
 export interface ConversationHistory extends Conversation {
   messages: Message[];
 }
@@ -34,6 +43,17 @@ export interface ConversationTurn {
 
 export function createConversation(): Promise<Conversation> {
   return request<Conversation>("/conversations", { method: "POST" });
+}
+
+export function listConversations(
+  limit: number,
+  cursor: string | null,
+): Promise<ConversationList> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor) {
+    query.set("cursor", cursor);
+  }
+  return request<ConversationList>(`/conversations?${query}`);
 }
 
 export function getConversation(

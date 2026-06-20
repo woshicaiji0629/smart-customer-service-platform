@@ -11,8 +11,10 @@ from customer_service.business.service import (
     is_withdrawal_tracking_query,
 )
 from customer_service.conversations.repository import (
+    ConversationCursor,
     ConversationHistory,
     ConversationNotFoundError,
+    ConversationPage,
     ConversationRecord,
     ConversationRepository,
     ConversationTurn,
@@ -22,6 +24,8 @@ from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage, RagServ
 
 MAX_MESSAGE_LENGTH = 4_000
 MAX_HISTORY_MESSAGES = 6
+DEFAULT_CONVERSATION_LIST_LIMIT = 50
+MAX_CONVERSATION_LIST_LIMIT = 100
 WITHDRAWAL_ORDER_ID_PROMPT = (
     "请提供提现订单号，例如 WD-10001，我可以帮你查询处理状态。"
 )
@@ -41,6 +45,21 @@ class ConversationService:
 
     async def create_conversation(self, user_id: str) -> ConversationRecord:
         return await self._repository.create_conversation(user_id)
+
+    async def list_conversations(
+        self,
+        user_id: str,
+        *,
+        limit: int = DEFAULT_CONVERSATION_LIST_LIMIT,
+        cursor: ConversationCursor | None = None,
+    ) -> ConversationPage:
+        if limit > MAX_CONVERSATION_LIST_LIMIT:
+            raise ValueError(f"limit 不能超过 {MAX_CONVERSATION_LIST_LIMIT}")
+        return await self._repository.list_conversations(
+            user_id,
+            limit=limit,
+            cursor=cursor,
+        )
 
     async def send_message(
         self,

@@ -1,19 +1,32 @@
 import asyncio
+import os
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text, update
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from customer_service.auth.api import get_current_user
 from customer_service.auth.session import AuthenticatedUser
 from customer_service.business.service import MOCK_WITHDRAWAL_SERVICE
-from customer_service.conversations.api import get_conversation_service
+from customer_service.conversations.api import (
+    _decode_cursor,
+    _encode_cursor,
+    get_conversation_service,
+)
 from customer_service.conversations.repository import (
+    ConversationCursor,
     ConversationHistory,
     ConversationNotFoundError,
+    ConversationPage,
     ConversationRecord,
+    ConversationRepository,
+    ConversationSummary,
     ConversationTurn,
     MessageRecord,
+    _conversation_title,
     conversations,
     messages,
 )
@@ -31,6 +44,7 @@ UPDATED_AT = datetime(2026, 6, 19, 8, 1, tzinfo=UTC)
 USER_ID = "10001"
 OTHER_USER_ID = "10002"
 CURRENT_USER = AuthenticatedUser(USER_ID, "模拟用户 Alice")
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 
 
 def _conversation() -> ConversationRecord:
@@ -81,6 +95,8 @@ class FakeConversationRepository:
         self.recent_limit: int | None = None
         self.saved: dict[str, object] | None = None
         self.checked_user_id: str | None = None
+        self.list_limit: int | None = None
+        self.list_cursor: ConversationCursor | None = None
 
     async def create_conversation(self, user_id: str) -> ConversationRecord:
         self.checked_user_id = user_id
@@ -93,6 +109,26 @@ class FakeConversationRepository:
     ) -> bool:
         self.checked_user_id = user_id
         return self.exists and user_id == USER_ID
+
+    async def list_conversations(
+        self,
+        user_id: str,
+        *,
+        limit: int,
+        cursor: ConversationCursor | None,
+    ) -> ConversationPage:
+        self.checked_user_id = user_id
+        self.list_limit = limit
+        self.list_cursor = cursor
+        return ConversationPage(
+            items=[
+                ConversationSummary(
+                    conversation=_conversation(),
+                    title="提现没有到账",
+                )
+            ],
+            next_cursor=None,
+        )
 
     async def save_turn(self, **values: object) -> ConversationTurn:
         self.saved = values
@@ -197,6 +233,158 @@ def test_conversation_service_saves_complete_turn_after_rag() -> None:
         ],
     }
     assert turn.assistant_message.role == "assistant"
+
+
+def test_conversation_service_lists_current_users_conversations() -> None:
+    repository = FakeConversationRepository()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+    )
+
+    cursor = ConversationCursor(
+        updated_at=UPDATED_AT,
+        conversation_id=CONVERSATION_ID,
+    )
+    page = asyncio.run(
+        service.list_conversations(USER_ID, limit=20, cursor=cursor)
+    )
+
+    assert repository.checked_user_id == USER_ID
+    assert repository.list_limit == 20
+    assert repository.list_cursor == cursor
+    assert page.items[0].title == "提现没有到账"
+    assert page.next_cursor is None
+
+
+def test_conversation_title_uses_first_question_and_truncates() -> None:
+    assert _conversation_title(None) == "空白会话"
+    assert _conversation_title("  提现完成\n但钱包没到账  ") == "提现完成 但钱包没到账"
+    assert _conversation_title("问" * 25) == f"{'问' * 24}…"
+
+
+def test_conversation_cursor_round_trip() -> None:
+    cursor = ConversationCursor(
+        updated_at=UPDATED_AT,
+        conversation_id=CONVERSATION_ID,
+    )
+
+    assert _decode_cursor(_encode_cursor(cursor)) == cursor
+
+
+@pytest.mark.skipif(
+    TEST_DATABASE_URL is None,
+    reason="需要通过 TEST_DATABASE_URL 显式启用 PostgreSQL 集成测试",
+)
+def test_list_conversations_against_postgresql() -> None:
+    asyncio.run(_test_list_conversations_against_postgresql())
+
+
+async def _test_list_conversations_against_postgresql() -> None:
+    assert TEST_DATABASE_URL is not None
+    schema_name = f"test_conversations_{uuid4().hex}"
+    admin_engine = create_async_engine(TEST_DATABASE_URL)
+    repository = None
+    schema_created = False
+
+    try:
+        async with admin_engine.begin() as connection:
+            await connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+        schema_created = True
+
+        repository = ConversationRepository(TEST_DATABASE_URL)
+        await repository.engine.dispose()
+        repository.engine = create_async_engine(
+            TEST_DATABASE_URL,
+            connect_args={"server_settings": {"search_path": schema_name}},
+        )
+        await repository.initialize_schema()
+
+        older = await repository.create_conversation(USER_ID)
+        newer = await repository.create_conversation(USER_ID)
+        other_user = await repository.create_conversation(OTHER_USER_ID)
+        await repository.save_turn(
+            conversation_id=older.conversation_id,
+            user_id=USER_ID,
+            user_content=f"  {'问' * 25}\n",
+            assistant_content="回答",
+            assistant_sources=[],
+        )
+        await repository.save_turn(
+            conversation_id=other_user.conversation_id,
+            user_id=OTHER_USER_ID,
+            user_content="其他用户的问题",
+            assistant_content="回答",
+            assistant_sources=[],
+        )
+
+        async with repository.engine.begin() as connection:
+            shared_updated_at = datetime(2026, 6, 19, 8, 0, tzinfo=UTC)
+            await connection.execute(
+                update(conversations)
+                .where(conversations.c.id == older.conversation_id)
+                .values(updated_at=shared_updated_at)
+            )
+            await connection.execute(
+                update(conversations)
+                .where(conversations.c.id == newer.conversation_id)
+                .values(updated_at=shared_updated_at)
+            )
+
+        first_page = await repository.list_conversations(
+            USER_ID,
+            limit=1,
+            cursor=None,
+        )
+        assert first_page.next_cursor is not None
+        second_page = await repository.list_conversations(
+            USER_ID,
+            limit=1,
+            cursor=first_page.next_cursor,
+        )
+        other_users_page = await repository.list_conversations(
+            OTHER_USER_ID,
+            limit=50,
+            cursor=None,
+        )
+
+        expected_ids = sorted(
+            [older.conversation_id, newer.conversation_id],
+            reverse=True,
+        )
+        assert [item.conversation.conversation_id for item in first_page.items] == [
+            expected_ids[0]
+        ]
+        assert first_page.next_cursor == ConversationCursor(
+            updated_at=shared_updated_at,
+            conversation_id=expected_ids[0],
+        )
+        assert [item.conversation.conversation_id for item in second_page.items] == [
+            expected_ids[1]
+        ]
+        assert second_page.next_cursor is None
+        titles_by_id = {
+            item.conversation.conversation_id: item.title
+            for item in [*first_page.items, *second_page.items]
+        }
+        assert titles_by_id[older.conversation_id] == f"{'问' * 24}…"
+        assert titles_by_id[newer.conversation_id] == "空白会话"
+        assert [item.conversation.user_id for item in other_users_page.items] == [
+            OTHER_USER_ID
+        ]
+        assert other_users_page.next_cursor is None
+    finally:
+        try:
+            if repository is not None:
+                await repository.close()
+            if schema_created:
+                async with admin_engine.begin() as connection:
+                    await connection.execute(
+                        text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE')
+                    )
+        finally:
+            await admin_engine.dispose()
 
 
 def test_conversation_service_rejects_missing_conversation_before_rag() -> None:
@@ -353,6 +541,29 @@ class FakeConversationService:
         assert user_id == USER_ID
         return _conversation()
 
+    async def list_conversations(
+        self,
+        user_id: str,
+        *,
+        limit: int,
+        cursor: ConversationCursor | None,
+    ) -> ConversationPage:
+        assert user_id == USER_ID
+        assert limit == 20
+        assert cursor is None
+        return ConversationPage(
+            items=[
+                ConversationSummary(
+                    conversation=_conversation(),
+                    title="提现没有到账",
+                )
+            ],
+            next_cursor=ConversationCursor(
+                updated_at=UPDATED_AT,
+                conversation_id=CONVERSATION_ID,
+            ),
+        )
+
     async def send_message(
         self,
         user_id: str,
@@ -403,6 +614,53 @@ def test_conversation_api_create_send_and_get_history() -> None:
         "user",
         "assistant",
     ]
+
+
+def test_conversation_api_lists_conversations_with_pagination() -> None:
+    app.dependency_overrides[get_conversation_service] = FakeConversationService
+    app.dependency_overrides[get_current_user] = lambda: CURRENT_USER
+    try:
+        response = TestClient(app).get("/conversations?limit=20")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == [
+        {
+            "id": str(CONVERSATION_ID),
+            "title": "提现没有到账",
+            "created_at": CREATED_AT.isoformat().replace("+00:00", "Z"),
+            "updated_at": UPDATED_AT.isoformat().replace("+00:00", "Z"),
+        }
+    ]
+    assert _decode_cursor(body["next_cursor"]) == ConversationCursor(
+        updated_at=UPDATED_AT,
+        conversation_id=CONVERSATION_ID,
+    )
+
+
+def test_conversation_api_rejects_invalid_list_pagination() -> None:
+    app.dependency_overrides[get_conversation_service] = FakeConversationService
+    app.dependency_overrides[get_current_user] = lambda: CURRENT_USER
+    try:
+        response = TestClient(app).get("/conversations?limit=101")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+
+
+def test_conversation_api_rejects_invalid_cursor() -> None:
+    app.dependency_overrides[get_conversation_service] = FakeConversationService
+    app.dependency_overrides[get_current_user] = lambda: CURRENT_USER
+    try:
+        response = TestClient(app).get("/conversations?limit=20&cursor=not-valid")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "cursor 无效"}
 
 
 def test_conversation_api_returns_404_for_missing_conversation() -> None:

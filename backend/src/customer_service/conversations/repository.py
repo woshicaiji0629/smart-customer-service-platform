@@ -18,8 +18,10 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    and_,
     func,
     insert,
+    or_,
     select,
     update,
 )
@@ -28,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
 metadata = MetaData()
+CONVERSATION_TITLE_LENGTH = 24
 
 conversations = Table(
     "conversations",
@@ -106,6 +109,24 @@ class ConversationHistory:
     messages: list[MessageRecord]
 
 
+@dataclass(frozen=True, slots=True)
+class ConversationSummary:
+    conversation: ConversationRecord
+    title: str
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationCursor:
+    updated_at: datetime
+    conversation_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationPage:
+    items: list[ConversationSummary]
+    next_cursor: ConversationCursor | None
+
+
 class ConversationRepository:
     def __init__(self, database_url: str) -> None:
         self.engine: AsyncEngine = create_async_engine(database_url)
@@ -143,6 +164,67 @@ class ConversationRepository:
         )
         async with self.engine.connect() as connection:
             return (await connection.execute(statement)).scalar_one_or_none() is not None
+
+    async def list_conversations(
+        self,
+        user_id: str,
+        *,
+        limit: int,
+        cursor: ConversationCursor | None,
+    ) -> ConversationPage:
+        if limit <= 0:
+            raise ValueError("limit 必须大于 0")
+
+        first_user_message = (
+            select(messages.c.content)
+            .where(
+                messages.c.conversation_id == conversations.c.id,
+                messages.c.role == "user",
+            )
+            .order_by(messages.c.created_at, messages.c.id)
+            .limit(1)
+            .correlate(conversations)
+            .scalar_subquery()
+        )
+        statement = select(
+            conversations,
+            first_user_message.label("first_user_message"),
+        ).where(conversations.c.user_id == user_id)
+        if cursor is not None:
+            statement = statement.where(
+                or_(
+                    conversations.c.updated_at < cursor.updated_at,
+                    and_(
+                        conversations.c.updated_at == cursor.updated_at,
+                        conversations.c.id < cursor.conversation_id,
+                    ),
+                )
+            )
+        statement = (
+            statement.order_by(
+                conversations.c.updated_at.desc(),
+                conversations.c.id.desc(),
+            )
+            .limit(limit + 1)
+        )
+        async with self.engine.connect() as connection:
+            rows = (await connection.execute(statement)).mappings().all()
+        page_rows = rows[:limit]
+        items = [
+            ConversationSummary(
+                conversation=_conversation_from_row(row),
+                title=_conversation_title(row["first_user_message"]),
+            )
+            for row in page_rows
+        ]
+        next_cursor = None
+        if len(rows) > limit:
+            last_conversation = items[-1].conversation
+            next_cursor = ConversationCursor(
+                updated_at=last_conversation.updated_at,
+                conversation_id=last_conversation.conversation_id,
+            )
+        return ConversationPage(items=items, next_cursor=next_cursor)
 
     async def save_turn(
         self,
@@ -266,3 +348,12 @@ def _message_from_row(row: Mapping[str, Any]) -> MessageRecord:
         sources=[dict(source) for source in row["sources"]],
         created_at=row["created_at"],
     )
+
+
+def _conversation_title(first_user_message: str | None) -> str:
+    if first_user_message is None:
+        return "空白会话"
+    normalized = " ".join(first_user_message.split())
+    if len(normalized) > CONVERSATION_TITLE_LENGTH:
+        return f"{normalized[:CONVERSATION_TITLE_LENGTH]}…"
+    return normalized
