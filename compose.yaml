@@ -1,13 +1,48 @@
 services:
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg16-bookworm
+    environment:
+      POSTGRES_DB: smart_customer_service
+      POSTGRES_USER: customer_service
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-customer_service_dev}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U customer_service -d smart_customer_service"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./.local-data/postgres:/var/lib/postgresql/data
+
+  database-init:
+    build:
+      context: .
+      target: backend-dev
+    command: ["uv", "run", "python", "-m", "script.init_database"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://customer_service:${POSTGRES_PASSWORD:-customer_service_dev}@postgres:5432/smart_customer_service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/backend
+
   backend:
     build:
       context: .
       target: backend-dev
     environment:
-      DATABASE_URL: ${DATABASE_URL:?请先设置 DATABASE_URL}
-      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?请先设置 DASHSCOPE_API_KEY}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      DATABASE_URL: postgresql+asyncpg://customer_service:${POSTGRES_PASSWORD:-customer_service_dev}@postgres:5432/smart_customer_service
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      MOCK_AUTH_ENABLED: "true"
+      REDIS_URL: redis://redis:6379/0
+      SESSION_COOKIE_SECURE: "false"
+    depends_on:
+      database-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
@@ -20,12 +55,25 @@ services:
     depends_on:
       - backend
     environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://127.0.0.1:8000}
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
     ports:
       - "5173:5173"
     volumes:
       - ./frontend:/app/frontend
       - frontend_node_modules:/app/frontend/node_modules
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ./.local-data/redis:/data
 
 volumes:
   frontend_node_modules:

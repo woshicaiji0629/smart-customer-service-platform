@@ -1,4 +1,4 @@
-"""HTTP API for anonymous conversations."""
+"""HTTP API for authenticated user conversations."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 
+from customer_service.auth.api import CurrentUserDependency
 from customer_service.conversations.repository import (
     ConversationHistory,
     ConversationNotFoundError,
@@ -20,6 +21,7 @@ from customer_service.conversations.repository import (
 from customer_service.conversations.service import (
     MAX_MESSAGE_LENGTH,
     ConversationService,
+    RagUnavailableError,
 )
 from customer_service.knowledge.chat import ChatCompletionError
 from customer_service.knowledge.embeddings import EmbeddingError
@@ -94,9 +96,10 @@ ConversationServiceDependency = Annotated[
 @router.post("", response_model=ConversationResponse, status_code=201)
 async def create_conversation(
     service: ConversationServiceDependency,
+    user: CurrentUserDependency,
 ) -> ConversationResponse:
     try:
-        conversation = await service.create_conversation()
+        conversation = await service.create_conversation(user.user_id)
     except SQLAlchemyError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -113,11 +116,21 @@ async def send_message(
     conversation_id: UUID,
     body: SendMessageRequest,
     service: ConversationServiceDependency,
+    user: CurrentUserDependency,
 ) -> ConversationTurnResponse:
     try:
-        turn = await service.send_message(conversation_id, body.content)
+        turn = await service.send_message(
+            user.user_id,
+            conversation_id,
+            body.content,
+        )
     except ConversationNotFoundError as exc:
         raise HTTPException(status_code=404, detail="会话不存在") from exc
+    except RagUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RAG 问答服务未配置",
+        ) from exc
     except EmbeddingError as exc:
         raise HTTPException(status_code=502, detail="Embedding 服务请求失败") from exc
     except ChatCompletionError as exc:
@@ -136,9 +149,10 @@ async def send_message(
 async def get_conversation(
     conversation_id: UUID,
     service: ConversationServiceDependency,
+    user: CurrentUserDependency,
 ) -> ConversationHistoryResponse:
     try:
-        history = await service.get_history(conversation_id)
+        history = await service.get_history(user.user_id, conversation_id)
     except ConversationNotFoundError as exc:
         raise HTTPException(status_code=404, detail="会话不存在") from exc
     except SQLAlchemyError as exc:

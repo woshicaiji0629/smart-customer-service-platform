@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -10,6 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 
+from customer_service.auth.api import router as auth_router
+from customer_service.auth.session import (
+    DEFAULT_SESSION_TTL_SECONDS,
+    RedisSessionStore,
+)
+from customer_service.business.api import router as business_router
+from customer_service.business.service import MOCK_WITHDRAWAL_SERVICE
 from customer_service.conversations.api import router as conversation_router
 from customer_service.conversations.repository import ConversationRepository
 from customer_service.conversations.service import ConversationService
@@ -41,48 +48,76 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.knowledge_search_service = None
     app.state.rag_service = None
     app.state.conversation_service = None
-    database_url = os.getenv("DATABASE_URL")
-    api_key = os.getenv("DASHSCOPE_API_KEY")
-    if not database_url or not api_key:
-        yield
-        return
-
-    repository = KnowledgeRepository(database_url)
-    conversation_repository = ConversationRepository(database_url)
+    app.state.session_store = None
+    app.state.session_ttl_seconds = int(
+        os.getenv("SESSION_TTL_SECONDS", str(DEFAULT_SESSION_TTL_SECONDS))
+    )
+    app.state.session_cookie_secure = _env_flag("SESSION_COOKIE_SECURE", default=True)
+    session_store: RedisSessionStore | None = None
+    if _env_flag("MOCK_AUTH_ENABLED"):
+        redis_url = os.getenv("REDIS_URL")
+        if not redis_url:
+            raise RuntimeError("启用 Mock 登录时必须配置 REDIS_URL")
+        session_store = RedisSessionStore(
+            redis_url,
+            ttl_seconds=app.state.session_ttl_seconds,
+        )
+        app.state.session_store = session_store
     try:
-        base_url = os.getenv("DASHSCOPE_BASE_URL", DEFAULT_BASE_URL)
-        async with (
-            DashScopeEmbeddingClient(
-                api_key=api_key,
-                base_url=base_url,
-                model=DEFAULT_MODEL,
-                dimensions=DEFAULT_DIMENSIONS,
-            ) as embedding_client,
-            DashScopeChatClient(
-                api_key=api_key,
-                base_url=base_url,
-                model=os.getenv("DASHSCOPE_CHAT_MODEL", DEFAULT_CHAT_MODEL),
-            ) as chat_client,
-        ):
-            app.state.knowledge_search_service = KnowledgeSearchService(
-                repository=repository,
-                embedding_client=embedding_client,
-            )
-            app.state.rag_service = RagService(
-                search_service=app.state.knowledge_search_service,
-                chat_client=chat_client,
-            )
+        async with AsyncExitStack() as stack:
+            if session_store is not None:
+                stack.push_async_callback(session_store.close)
+
+            database_url = os.getenv("DATABASE_URL")
+            if not database_url:
+                yield
+                return
+
+            conversation_repository = ConversationRepository(database_url)
+            stack.push_async_callback(conversation_repository.close)
+
+            rag_service: RagService | None = None
+            api_key = os.getenv("DASHSCOPE_API_KEY")
+            if api_key:
+                knowledge_repository = KnowledgeRepository(database_url)
+                stack.push_async_callback(knowledge_repository.close)
+                base_url = os.getenv("DASHSCOPE_BASE_URL", DEFAULT_BASE_URL)
+                embedding_client = await stack.enter_async_context(
+                    DashScopeEmbeddingClient(
+                        api_key=api_key,
+                        base_url=base_url,
+                        model=DEFAULT_MODEL,
+                        dimensions=DEFAULT_DIMENSIONS,
+                    )
+                )
+                chat_client = await stack.enter_async_context(
+                    DashScopeChatClient(
+                        api_key=api_key,
+                        base_url=base_url,
+                        model=os.getenv("DASHSCOPE_CHAT_MODEL", DEFAULT_CHAT_MODEL),
+                    )
+                )
+                app.state.knowledge_search_service = KnowledgeSearchService(
+                    repository=knowledge_repository,
+                    embedding_client=embedding_client,
+                )
+                rag_service = RagService(
+                    search_service=app.state.knowledge_search_service,
+                    chat_client=chat_client,
+                )
+                app.state.rag_service = rag_service
+
             app.state.conversation_service = ConversationService(
                 repository=conversation_repository,
-                rag_service=app.state.rag_service,
+                rag_service=rag_service,
+                withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
             )
             yield
     finally:
         app.state.knowledge_search_service = None
         app.state.rag_service = None
         app.state.conversation_service = None
-        await conversation_repository.close()
-        await repository.close()
+        app.state.session_store = None
 
 
 app = FastAPI(title="Smart Customer Service API", lifespan=lifespan)
@@ -91,8 +126,18 @@ app.add_middleware(
     allow_origins=LOCAL_FRONTEND_ORIGINS,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type"],
+    allow_credentials=True,
 )
+app.include_router(auth_router)
+app.include_router(business_router)
 app.include_router(conversation_router)
+
+
+def _env_flag(name: str, *, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
 
 
 class KnowledgeSearchRequest(BaseModel):

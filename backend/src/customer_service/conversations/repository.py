@@ -1,4 +1,4 @@
-"""PostgreSQL persistence for anonymous conversations."""
+"""PostgreSQL persistence for user-owned conversations."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ conversations = Table(
     "conversations",
     metadata,
     Column("id", PostgreSQLUUID(as_uuid=True), primary_key=True),
+    Column("user_id", String(64), nullable=False, index=True),
     Column(
         "created_at",
         DateTime(timezone=True),
@@ -78,6 +79,7 @@ class ConversationNotFoundError(LookupError):
 @dataclass(frozen=True, slots=True)
 class ConversationRecord:
     conversation_id: UUID
+    user_id: str
     created_at: datetime
     updated_at: datetime
 
@@ -111,17 +113,21 @@ class ConversationRepository:
     async def close(self) -> None:
         await self.engine.dispose()
 
-    async def initialize_schema(self) -> None:
+    async def initialize_schema(self, *, reset: bool = False) -> None:
         async with self.engine.begin() as connection:
+            if reset:
+                await connection.run_sync(messages.drop, checkfirst=True)
+                await connection.run_sync(conversations.drop, checkfirst=True)
             await connection.run_sync(metadata.create_all)
 
-    async def create_conversation(self) -> ConversationRecord:
+    async def create_conversation(self, user_id: str) -> ConversationRecord:
         conversation_id = uuid4()
         statement = (
             insert(conversations)
-            .values(id=conversation_id)
+            .values(id=conversation_id, user_id=user_id)
             .returning(
                 conversations.c.id,
+                conversations.c.user_id,
                 conversations.c.created_at,
                 conversations.c.updated_at,
             )
@@ -130,9 +136,10 @@ class ConversationRepository:
             row = (await connection.execute(statement)).mappings().one()
         return _conversation_from_row(row)
 
-    async def conversation_exists(self, conversation_id: UUID) -> bool:
+    async def conversation_exists(self, conversation_id: UUID, user_id: str) -> bool:
         statement = select(conversations.c.id).where(
-            conversations.c.id == conversation_id
+            conversations.c.id == conversation_id,
+            conversations.c.user_id == user_id,
         )
         async with self.engine.connect() as connection:
             return (await connection.execute(statement)).scalar_one_or_none() is not None
@@ -141,6 +148,7 @@ class ConversationRepository:
         self,
         *,
         conversation_id: UUID,
+        user_id: str,
         user_content: str,
         assistant_content: str,
         assistant_sources: list[dict[str, str]],
@@ -149,7 +157,10 @@ class ConversationRepository:
             conversation_row = (
                 await connection.execute(
                     update(conversations)
-                    .where(conversations.c.id == conversation_id)
+                    .where(
+                        conversations.c.id == conversation_id,
+                        conversations.c.user_id == user_id,
+                    )
                     .values(updated_at=func.now())
                     .returning(conversations.c.id)
                 )
@@ -191,13 +202,18 @@ class ConversationRepository:
         self,
         conversation_id: UUID,
         *,
+        user_id: str,
         limit: int,
     ) -> list[MessageRecord]:
         if limit <= 0:
             raise ValueError("limit 必须大于 0")
         statement = (
             select(messages)
-            .where(messages.c.conversation_id == conversation_id)
+            .select_from(messages.join(conversations))
+            .where(
+                messages.c.conversation_id == conversation_id,
+                conversations.c.user_id == user_id,
+            )
             .order_by(messages.c.created_at.desc(), messages.c.id.desc())
             .limit(limit)
         )
@@ -205,9 +221,14 @@ class ConversationRepository:
             rows = (await connection.execute(statement)).mappings().all()
         return list(reversed([_message_from_row(row) for row in rows]))
 
-    async def get_history(self, conversation_id: UUID) -> ConversationHistory:
+    async def get_history(
+        self,
+        conversation_id: UUID,
+        user_id: str,
+    ) -> ConversationHistory:
         conversation_statement = select(conversations).where(
-            conversations.c.id == conversation_id
+            conversations.c.id == conversation_id,
+            conversations.c.user_id == user_id,
         )
         message_statement = (
             select(messages)
@@ -230,6 +251,7 @@ class ConversationRepository:
 def _conversation_from_row(row: Mapping[str, Any]) -> ConversationRecord:
     return ConversationRecord(
         conversation_id=row["id"],
+        user_id=row["user_id"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )

@@ -1,0 +1,1 @@
+"""Mock exchange business queries."""

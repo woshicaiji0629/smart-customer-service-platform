@@ -130,6 +130,7 @@ body {
 }
 
 button,
+input,
 textarea {
   font: inherit;
 }
@@ -196,6 +197,135 @@ a {
   margin-left: auto;
   color: #d8e4da;
   font-size: 0.82rem;
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #d8e4da;
+  font-size: 0.78rem;
+}
+
+.user-menu button {
+  padding: 5px 8px;
+  color: #173f2b;
+  background: #f0d59f;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.auth-loading,
+.mock-login {
+  display: grid;
+  min-height: 100vh;
+  place-content: center;
+}
+
+.auth-loading {
+  color: #66716a;
+}
+
+.mock-login {
+  width: min(520px, calc(100% - 32px));
+  margin: 0 auto;
+  text-align: center;
+}
+
+.mock-login .eyebrow {
+  color: #52705d;
+}
+
+.mock-login h1 {
+  margin: 8px 0;
+  font-family: Georgia, "Songti SC", serif;
+}
+
+.mock-login > p:not(.eyebrow, .error-message) {
+  margin: 0 0 28px;
+  color: #66716a;
+}
+
+.mock-user-list {
+  display: grid;
+  gap: 12px;
+}
+
+.mock-user-list button {
+  display: flex;
+  padding: 17px 20px;
+  align-items: center;
+  justify-content: space-between;
+  color: #173f2b;
+  background: #fff;
+  border: 1px solid #ccd7cd;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.mock-user-list span {
+  color: #748078;
+  font-size: 0.8rem;
+}
+
+.business-query {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid #31533f;
+}
+
+.business-query label {
+  display: block;
+  margin: 5px 0 10px;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.business-query > div {
+  display: flex;
+  gap: 6px;
+}
+
+.business-query input {
+  min-width: 0;
+  padding: 9px 10px;
+  color: #173f2b;
+  background: #f7faf7;
+  border: 1px solid #496b57;
+  border-radius: 7px;
+}
+
+.business-query button {
+  padding: 8px 10px;
+  color: #173f2b;
+  font-weight: 700;
+  background: #f0d59f;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.business-query dl {
+  margin: 12px 0 0;
+  padding: 10px;
+  color: #d8e4da;
+  font-size: 0.75rem;
+  background: #173f2b;
+  border-radius: 8px;
+}
+
+.business-query dl div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.business-query dl div + div {
+  margin-top: 5px;
+}
+
+.business-query dd {
+  margin: 0;
 }
 
 .status-dot {

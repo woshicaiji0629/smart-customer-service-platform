@@ -27,6 +27,7 @@ def test_local_frontend_cors_preflight() -> None:
     assert response.headers["access-control-allow-origin"] == (
         "http://localhost:5173"
     )
+    assert response.headers["access-control-allow-credentials"] == "true"
     assert "POST" in response.headers["access-control-allow-methods"]
 
 

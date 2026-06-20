@@ -7,16 +7,24 @@ import {
 } from "react";
 
 import {
-  ApiError,
   createConversation,
   getConversation,
   type Message,
   sendMessage,
 } from "./api/conversations";
+import {
+  type AuthenticatedUser,
+  getCurrentUser,
+  listMockUsers,
+  logout,
+  mockLogin,
+} from "./api/auth";
+import { getWithdrawal, type Withdrawal } from "./api/business";
+import { ApiError } from "./api/client";
 import "./App.css";
 
-const CONVERSATION_STORAGE_KEY = "smart-support-conversation-id";
-const CONVERSATION_LIST_STORAGE_KEY = "smart-support-conversations";
+const CONVERSATION_STORAGE_KEY_PREFIX = "smart-support-conversation-id";
+const CONVERSATION_LIST_STORAGE_KEY_PREFIX = "smart-support-conversations";
 const CONVERSATION_TITLE_LENGTH = 24;
 
 interface StoredConversation {
@@ -52,8 +60,14 @@ function isStoredConversation(value: unknown): value is StoredConversation {
   );
 }
 
-function readStoredConversations(): StoredConversation[] {
-  const stored = window.localStorage.getItem(CONVERSATION_LIST_STORAGE_KEY);
+function userStorageKey(prefix: string, userId: string): string {
+  return `${prefix}:${userId}`;
+}
+
+function readStoredConversations(userId: string): StoredConversation[] {
+  const stored = window.localStorage.getItem(
+    userStorageKey(CONVERSATION_LIST_STORAGE_KEY_PREFIX, userId),
+  );
   if (!stored) {
     return [];
   }
@@ -103,6 +117,14 @@ function formatUpdatedAt(updatedAt: string): string {
 }
 
 export function App() {
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
+  const [mockUsers, setMockUsers] = useState<AuthenticatedUser[]>([]);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isChangingAuth, setIsChangingAuth] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [withdrawalOrderId, setWithdrawalOrderId] = useState("");
+  const [withdrawal, setWithdrawal] = useState<Withdrawal | null>(null);
+  const [isLoadingWithdrawal, setIsLoadingWithdrawal] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<StoredConversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -116,14 +138,63 @@ export function App() {
   useEffect(() => {
     let isActive = true;
 
+    async function restoreUser() {
+      try {
+        const currentUser = await getCurrentUser();
+        if (isActive) {
+          setUser(currentUser);
+        }
+      } catch (requestError) {
+        if (!(requestError instanceof ApiError && requestError.status === 401)) {
+          if (isActive) {
+            setAuthError(errorMessage(requestError));
+          }
+        }
+        try {
+          const users = await listMockUsers();
+          if (isActive) {
+            setMockUsers(users);
+          }
+        } catch (usersError) {
+          if (isActive) {
+            setAuthError(errorMessage(usersError));
+          }
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingAuth(false);
+        }
+      }
+    }
+
+    void restoreUser();
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setIsLoadingHistory(false);
+      return;
+    }
+
+    const activeUser = user;
+    let isActive = true;
+    setHasLoadedStorage(false);
+    setIsLoadingHistory(true);
+    setConversationId(null);
+    setConversations([]);
+    setMessages([]);
+
     async function restoreConversation() {
       let storedConversationId: string | null;
       let storedConversations: StoredConversation[];
 
       try {
-        storedConversations = readStoredConversations();
+        storedConversations = readStoredConversations(activeUser.user_id);
         storedConversationId = window.localStorage.getItem(
-          CONVERSATION_STORAGE_KEY,
+          userStorageKey(CONVERSATION_STORAGE_KEY_PREFIX, activeUser.user_id),
         );
       } catch {
         if (isActive) {
@@ -193,41 +264,43 @@ export function App() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    if (!hasLoadedStorage) {
+    if (!hasLoadedStorage || !user) {
       return;
     }
 
     try {
       window.localStorage.setItem(
-        CONVERSATION_LIST_STORAGE_KEY,
+        userStorageKey(CONVERSATION_LIST_STORAGE_KEY_PREFIX, user.user_id),
         JSON.stringify(conversations),
       );
     } catch {
       setError("无法在浏览器中保存会话列表。");
     }
-  }, [conversations, hasLoadedStorage]);
+  }, [conversations, hasLoadedStorage, user]);
 
   useEffect(() => {
-    if (!hasLoadedStorage) {
+    if (!hasLoadedStorage || !user) {
       return;
     }
 
     try {
       if (conversationId) {
         window.localStorage.setItem(
-          CONVERSATION_STORAGE_KEY,
+          userStorageKey(CONVERSATION_STORAGE_KEY_PREFIX, user.user_id),
           conversationId,
         );
       } else {
-        window.localStorage.removeItem(CONVERSATION_STORAGE_KEY);
+        window.localStorage.removeItem(
+          userStorageKey(CONVERSATION_STORAGE_KEY_PREFIX, user.user_id),
+        );
       }
     } catch {
       setError("无法在浏览器中保存当前会话。");
     }
-  }, [conversationId, hasLoadedStorage]);
+  }, [conversationId, hasLoadedStorage, user]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -353,6 +426,85 @@ export function App() {
     }
   }
 
+  async function handleLogin(userId: string) {
+    setIsChangingAuth(true);
+    setAuthError(null);
+    try {
+      setUser(await mockLogin(userId));
+    } catch (requestError) {
+      setAuthError(errorMessage(requestError));
+    } finally {
+      setIsChangingAuth(false);
+    }
+  }
+
+  async function handleLogout() {
+    setIsChangingAuth(true);
+    setAuthError(null);
+    try {
+      await logout();
+      setUser(null);
+      setConversationId(null);
+      setConversations([]);
+      setMessages([]);
+      setHasLoadedStorage(false);
+      setWithdrawal(null);
+      if (mockUsers.length === 0) {
+        setMockUsers(await listMockUsers());
+      }
+    } catch (requestError) {
+      setAuthError(errorMessage(requestError));
+    } finally {
+      setIsChangingAuth(false);
+    }
+  }
+
+  async function handleWithdrawalQuery(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const orderId = withdrawalOrderId.trim();
+    if (!orderId || isLoadingWithdrawal) {
+      return;
+    }
+    setIsLoadingWithdrawal(true);
+    setWithdrawal(null);
+    setError(null);
+    try {
+      setWithdrawal(await getWithdrawal(orderId));
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setIsLoadingWithdrawal(false);
+    }
+  }
+
+  if (isLoadingAuth) {
+    return <div className="auth-loading">正在检查登录状态…</div>;
+  }
+
+  if (!user) {
+    return (
+      <main className="mock-login">
+        <p className="eyebrow">DEVELOPMENT ONLY</p>
+        <h1>选择 Mock 用户</h1>
+        <p>身份仅用于本地验证 Session 和业务数据隔离。</p>
+        {authError && <p className="error-message">{authError}</p>}
+        <div className="mock-user-list">
+          {mockUsers.map((mockUser) => (
+            <button
+              key={mockUser.user_id}
+              type="button"
+              disabled={isChangingAuth}
+              onClick={() => void handleLogin(mockUser.user_id)}
+            >
+              <strong>{mockUser.display_name}</strong>
+              <span>UID {mockUser.user_id}</span>
+            </button>
+          ))}
+        </div>
+      </main>
+    );
+  }
+
   return (
     <div className="app-layout">
       <aside className="conversation-sidebar" aria-label="会话管理">
@@ -391,6 +543,31 @@ export function App() {
             ))}
           </nav>
         )}
+        <form className="business-query" onSubmit={handleWithdrawalQuery}>
+          <p className="sidebar-eyebrow">MOCK BUSINESS</p>
+          <label htmlFor="withdrawal-order">提现订单查询</label>
+          <div>
+            <input
+              id="withdrawal-order"
+              value={withdrawalOrderId}
+              placeholder={user.user_id === "10001" ? "WD-10001" : "WD-10002"}
+              onChange={(event) => setWithdrawalOrderId(event.target.value)}
+            />
+            <button
+              type="submit"
+              disabled={isLoadingWithdrawal || !withdrawalOrderId.trim()}
+            >
+              查询
+            </button>
+          </div>
+          {withdrawal && (
+            <dl>
+              <div><dt>状态</dt><dd>{withdrawal.status}</dd></div>
+              <div><dt>金额</dt><dd>{withdrawal.size} {withdrawal.coin}</dd></div>
+              <div><dt>网络</dt><dd>{withdrawal.chain}</dd></div>
+            </dl>
+          )}
+        </form>
       </aside>
 
       <main className="app-shell">
@@ -405,6 +582,16 @@ export function App() {
         <span className="service-status">
           <span className="status-dot" aria-hidden="true" /> 在线
         </span>
+        <div className="user-menu">
+          <span>{user.display_name}</span>
+          <button
+            type="button"
+            disabled={isChangingAuth}
+            onClick={() => void handleLogout()}
+          >
+            退出
+          </button>
+        </div>
       </header>
 
       <section className="conversation" aria-label="客服对话">
