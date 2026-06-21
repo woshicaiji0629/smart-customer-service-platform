@@ -218,7 +218,15 @@ class FakeRagService:
 
 
 class FakeIntentRecognizer:
-    def __init__(self) -> None:
+    def __init__(self, decision: IntentDecision | None = None) -> None:
+        self.decision = decision or IntentDecision(
+            route="knowledge_rag",
+            category="other",
+            intent="unknown",
+            confidence=1.0,
+            entities={},
+            missing_fields=(),
+        )
         self.history: list[IntentHistoryMessage] = []
 
     async def recognize(
@@ -228,14 +236,7 @@ class FakeIntentRecognizer:
         history: list[IntentHistoryMessage],
     ) -> IntentDecision:
         self.history = history
-        return IntentDecision(
-            route="knowledge_rag",
-            category="other",
-            intent="unknown",
-            confidence=1.0,
-            entities={},
-            missing_fields=(),
-        )
+        return self.decision
 
 
 def test_conversation_schema_has_expected_columns() -> None:
@@ -681,6 +682,152 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
     assert repository.traces[0]["category"] == "deposit"
     assert repository.traces[0]["intent"] == "rule"
     assert repository.traces[0]["handling_result"] == "rag_answer"
+
+
+@pytest.mark.parametrize(
+    ("decision", "expected_content", "expected_sources", "expected_handling_result"),
+    [
+        (
+            IntentDecision(
+                route="knowledge_rag",
+                category="deposit",
+                intent="rule",
+                confidence=1.0,
+                entities={},
+                missing_fields=(),
+            ),
+            "请查询 TxID。[资料 1]",
+            [
+                {
+                    "article_id": "article-1",
+                    "title": "提现没有到账",
+                    "source_url": "https://example.com/article-1",
+                }
+            ],
+            "rag_answer",
+        ),
+        (
+            IntentDecision(
+                route="knowledge_rag",
+                category="deposit",
+                intent="memo_tag_issue",
+                confidence=1.0,
+                entities={},
+                missing_fields=(),
+            ),
+            "请查询 TxID。[资料 1]",
+            [
+                {
+                    "article_id": "article-1",
+                    "title": "提现没有到账",
+                    "source_url": "https://example.com/article-1",
+                }
+            ],
+            "rag_answer",
+        ),
+        (
+            IntentDecision(
+                route="knowledge_rag",
+                category="identity_verification",
+                intent="verification_failure",
+                confidence=1.0,
+                entities={},
+                missing_fields=(),
+            ),
+            "请查询 TxID。[资料 1]",
+            [
+                {
+                    "article_id": "article-1",
+                    "title": "提现没有到账",
+                    "source_url": "https://example.com/article-1",
+                }
+            ],
+            "rag_answer",
+        ),
+        (
+            IntentDecision(
+                route="knowledge_rag",
+                category="account_security",
+                intent="compromised",
+                confidence=1.0,
+                entities={},
+                missing_fields=(),
+            ),
+            "请查询 TxID。[资料 1]",
+            [
+                {
+                    "article_id": "article-1",
+                    "title": "提现没有到账",
+                    "source_url": "https://example.com/article-1",
+                }
+            ],
+            "rag_answer",
+        ),
+        (
+            IntentDecision(
+                route="human_request",
+                category="other",
+                intent="human_only",
+                confidence=1.0,
+                entities={},
+                missing_fields=(),
+            ),
+            "请先描述需要解决的具体问题，我会优先尝试自动查询或提供处理方案。",
+            [],
+            "human_request",
+        ),
+        (
+            IntentDecision(
+                route="out_of_scope",
+                category="other",
+                intent="out_of_scope",
+                confidence=1.0,
+                entities={},
+                missing_fields=(),
+            ),
+            "我目前只能处理交易所账户、交易和平台使用相关的问题。",
+            [],
+            "out_of_scope",
+        ),
+        (
+            IntentDecision(
+                route="unknown",
+                category="other",
+                intent="unknown",
+                confidence=1.0,
+                entities={},
+                missing_fields=(),
+            ),
+            "请补充说明你遇到的具体问题、操作步骤或页面提示。",
+            [],
+            "unknown",
+        ),
+    ],
+)
+def test_conversation_service_routes_intent_handling_matrix(
+    decision: IntentDecision,
+    expected_content: str,
+    expected_sources: list[dict[str, str]],
+    expected_handling_result: str,
+) -> None:
+    repository = FakeConversationRepository()
+    rag_service = FakeRagService()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=rag_service,  # type: ignore[arg-type]
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=FakeIntentRecognizer(decision),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "测试问题"))
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == expected_content
+    assert repository.saved["assistant_sources"] == expected_sources
+    assert repository.traces[0]["route"] == decision.route
+    assert repository.traces[0]["category"] == decision.category
+    assert repository.traces[0]["intent"] == decision.intent
+    assert repository.traces[0]["handling_result"] == expected_handling_result
 
 
 def test_conversation_service_routes_deposit_txid_to_business_query() -> None:
