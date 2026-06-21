@@ -18,6 +18,14 @@ export class ApiError extends Error {
   }
 }
 
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+
+  return "暂时无法连接客服服务，请稍后重试。";
+}
+
 export async function request<T>(
   path: string,
   init?: RequestInit,

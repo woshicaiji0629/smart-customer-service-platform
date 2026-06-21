@@ -7,10 +7,18 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 COPY README.md ./
-COPY backend ./backend
+COPY backend/pyproject.toml backend/uv.lock ./backend/
 
 WORKDIR /app/backend
-RUN uv sync --locked --dev
+# 第三方依赖只由项目元数据决定，业务源码变化时可复用这一层。
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --dev --no-install-project
+
+COPY backend /app/backend
+
+# 源码复制完成后只需安装本地项目，下载缓存可在重试构建时继续复用。
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --dev
 
 EXPOSE 8000
 CMD ["uv", "run", "uvicorn", "customer_service.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
