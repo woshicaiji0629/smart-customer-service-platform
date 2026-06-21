@@ -12,9 +12,16 @@ class FakeClassifier:
     def __init__(self, response: str) -> None:
         self.response = response
         self.messages: list[ChatMessage] = []
+        self.purpose = ""
 
-    async def complete(self, messages: list[ChatMessage]) -> str:
+    async def complete(
+        self,
+        messages: list[ChatMessage],
+        *,
+        purpose: str = "chat",
+    ) -> str:
         self.messages = messages
+        self.purpose = purpose
         return self.response
 
 
@@ -79,6 +86,7 @@ def test_model_classifies_topic_and_extracts_entities_with_history() -> None:
         "failure_reason": "证件模糊",
     }
     assert "个人认证提示证件照片模糊" in classifier.messages[1]["content"]
+    assert classifier.purpose == "intent"
 
 
 def test_low_confidence_result_falls_back_to_unknown() -> None:

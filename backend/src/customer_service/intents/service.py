@@ -119,7 +119,12 @@ JSON 字段：
 
 
 class ChatCompletion(Protocol):
-    async def complete(self, messages: Sequence[ChatMessage]) -> str: ...
+    async def complete(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        purpose: str = "chat",
+    ) -> str: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,7 +180,8 @@ class IntentService:
             return _unknown_decision()
 
         response = await self._classifier.complete(
-            _build_classifier_messages(normalized, history)
+            _build_classifier_messages(normalized, history),
+            purpose="intent",
         )
         try:
             decision = _parse_decision(response)

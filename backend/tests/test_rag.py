@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from customer_service.knowledge.chat import DashScopeChatClient
+from customer_service.knowledge.usage import ModelUsageRecord
 from customer_service.knowledge.rag import (
     NO_KNOWLEDGE_ANSWER,
     RagAnswer,
@@ -61,10 +62,17 @@ class FakeChatClient:
     def __init__(self) -> None:
         self.messages: list[dict[str, str]] = []
         self.requests: list[list[dict[str, str]]] = []
+        self.purposes: list[str] = []
 
-    async def complete(self, messages: list[dict[str, str]]) -> str:
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        purpose: str = "chat",
+    ) -> str:
         self.messages = messages
         self.requests.append(messages.copy())
+        self.purposes.append(purpose)
         return "请先使用 TxID 查询链上状态。[资料 1]"
 
 
@@ -72,10 +80,25 @@ class SequencedChatClient:
     def __init__(self, responses: list[str]) -> None:
         self._responses = iter(responses)
         self.requests: list[list[dict[str, str]]] = []
+        self.purposes: list[str] = []
 
-    async def complete(self, messages: list[dict[str, str]]) -> str:
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        purpose: str = "chat",
+    ) -> str:
         self.requests.append(messages.copy())
+        self.purposes.append(purpose)
         return next(self._responses)
+
+
+class RecordingUsageSink:
+    def __init__(self) -> None:
+        self.records: list[ModelUsageRecord] = []
+
+    def record(self, usage: ModelUsageRecord) -> None:
+        self.records.append(usage)
 
 
 def test_chat_client_calls_compatible_api() -> None:
@@ -85,11 +108,18 @@ def test_chat_client_calls_compatible_api() -> None:
         captured.append(request)
         return httpx.Response(
             200,
-            json={"choices": [{"message": {"content": "测试回答"}}]},
+            json={
+                "choices": [{"message": {"content": "测试回答"}}],
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "total_tokens": 120,
+                },
+            },
         )
 
     async def run() -> str:
-        client = DashScopeChatClient(api_key="test")
+        client = DashScopeChatClient(api_key="test", usage_sink=sink)
         await client._client.aclose()
         client._client = httpx.AsyncClient(
             base_url="https://example.com/v1/",
@@ -98,6 +128,7 @@ def test_chat_client_calls_compatible_api() -> None:
         async with client:
             return await client.complete([{"role": "user", "content": "问题"}])
 
+    sink = RecordingUsageSink()
     answer = asyncio.run(run())
 
     assert answer == "测试回答"
@@ -106,6 +137,16 @@ def test_chat_client_calls_compatible_api() -> None:
         "model": "qwen-plus",
         "messages": [{"role": "user", "content": "问题"}],
     }
+    assert sink.records == [
+        ModelUsageRecord(
+            model="qwen-plus",
+            purpose="chat",
+            prompt_tokens=100,
+            completion_tokens=20,
+            total_tokens=120,
+            estimated_cost_cny=0.00012,
+        )
+    ]
 
 
 def test_chat_client_requests_json_mode() -> None:
@@ -180,6 +221,7 @@ def test_rag_service_builds_grounded_prompt_and_deduplicates_sources() -> None:
         ),
     ]
     assert len(chat_client.requests) == 2
+    assert chat_client.purposes == ["rag_answer", "rag_review"]
     review_messages = chat_client.requests[1]
     assert "客服回答审核员" in review_messages[0]["content"]
     assert "用户没有询问的未知事项清单" in review_messages[0]["content"]
@@ -246,6 +288,11 @@ def test_rag_service_retries_answer_with_invalid_citation() -> None:
 
     assert result.answer == "请查询链上状态。[资料 1]"
     assert len(chat_client.requests) == 3
+    assert chat_client.purposes == [
+        "rag_answer",
+        "rag_citation_correction",
+        "rag_review",
+    ]
     assert "不存在的资料编号：3" in chat_client.requests[1][-1]["content"]
 
 

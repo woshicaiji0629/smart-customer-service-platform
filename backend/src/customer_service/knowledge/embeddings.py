@@ -8,6 +8,12 @@ from typing import Final
 
 import httpx
 
+from customer_service.knowledge.usage import (
+    LoggingModelUsageSink,
+    ModelUsageSink,
+    build_usage_record,
+)
+
 
 DEFAULT_BASE_URL: Final = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 DEFAULT_MODEL: Final = "text-embedding-v4"
@@ -28,6 +34,7 @@ class DashScopeEmbeddingClient:
         model: str = DEFAULT_MODEL,
         dimensions: int = DEFAULT_DIMENSIONS,
         timeout: float = 30.0,
+        usage_sink: ModelUsageSink | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("api_key 不能为空")
@@ -35,6 +42,7 @@ class DashScopeEmbeddingClient:
             raise ValueError("dimensions 必须大于 0")
         self.model = model
         self.dimensions = dimensions
+        self._usage_sink = usage_sink or LoggingModelUsageSink()
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/") + "/",
             timeout=httpx.Timeout(timeout),
@@ -100,4 +108,7 @@ class DashScopeEmbeddingClient:
             for vector in vectors
         ):
             raise EmbeddingError(f"Embedding 维度不是预期的 {self.dimensions}")
+        self._usage_sink.record(
+            build_usage_record(model=self.model, purpose="embedding", payload=payload)
+        )
         return vectors

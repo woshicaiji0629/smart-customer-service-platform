@@ -9,6 +9,11 @@ from typing import Final, Literal, TypedDict
 import httpx
 
 from customer_service.knowledge.embeddings import DEFAULT_BASE_URL
+from customer_service.knowledge.usage import (
+    LoggingModelUsageSink,
+    ModelUsageSink,
+    build_usage_record,
+)
 
 
 DEFAULT_CHAT_MODEL: Final = "qwen-plus"
@@ -33,6 +38,7 @@ class DashScopeChatClient:
         model: str = DEFAULT_CHAT_MODEL,
         timeout: float = 60.0,
         json_mode: bool = False,
+        usage_sink: ModelUsageSink | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("api_key 不能为空")
@@ -40,6 +46,7 @@ class DashScopeChatClient:
             raise ValueError("model 不能为空")
         self.model = model
         self._json_mode = json_mode
+        self._usage_sink = usage_sink or LoggingModelUsageSink()
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/") + "/",
             timeout=httpx.Timeout(timeout),
@@ -52,7 +59,12 @@ class DashScopeChatClient:
     async def __aexit__(self, *_: object) -> None:
         await self._client.aclose()
 
-    async def complete(self, messages: Sequence[ChatMessage]) -> str:
+    async def complete(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        purpose: str = "chat",
+    ) -> str:
         if not messages:
             raise ValueError("messages 不能为空")
 
@@ -82,9 +94,13 @@ class DashScopeChatClient:
             )
 
         try:
-            content = response.json()["choices"][0]["message"]["content"]
+            payload = response.json()
+            content = payload["choices"][0]["message"]["content"]
         except (IndexError, KeyError, TypeError, ValueError) as exc:
             raise ChatCompletionError("大模型响应格式错误") from exc
         if not isinstance(content, str) or not content.strip():
             raise ChatCompletionError("大模型响应内容为空")
+        self._usage_sink.record(
+            build_usage_record(model=self.model, purpose=purpose, payload=payload)
+        )
         return content.strip()

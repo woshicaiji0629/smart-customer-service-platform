@@ -98,7 +98,8 @@ class RagService:
         search_query = normalized_question
         if normalized_history:
             search_query = await self._chat_client.complete(
-                _build_rewrite_messages(normalized_question, normalized_history)
+                _build_rewrite_messages(normalized_question, normalized_history),
+                purpose="rag_rewrite",
             )
         results = [
             result
@@ -123,7 +124,7 @@ class RagService:
                 ),
             },
         ]
-        answer = await self._chat_client.complete(messages)
+        answer = await self._chat_client.complete(messages, purpose="rag_answer")
         invalid_citations = _invalid_citations(answer, len(grouped_results))
         if invalid_citations:
             messages.extend(
@@ -138,7 +139,10 @@ class RagService:
                     },
                 ]
             )
-            answer = await self._chat_client.complete(messages)
+            answer = await self._chat_client.complete(
+                messages,
+                purpose="rag_citation_correction",
+            )
             invalid_citations = _invalid_citations(answer, len(grouped_results))
             if invalid_citations:
                 values = ", ".join(str(value) for value in invalid_citations)
@@ -150,7 +154,8 @@ class RagService:
                 grouped_results=grouped_results,
                 history=normalized_history,
                 draft_answer=answer,
-            )
+            ),
+            purpose="rag_review",
         )
         invalid_citations = _invalid_citations(answer, len(grouped_results))
         if invalid_citations:
