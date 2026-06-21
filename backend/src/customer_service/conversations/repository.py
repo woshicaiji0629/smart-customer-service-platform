@@ -10,11 +10,13 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
     MetaData,
+    Numeric,
     String,
     Table,
     Text,
@@ -72,6 +74,29 @@ messages = Table(
         server_default=func.now(),
     ),
     CheckConstraint("role IN ('user', 'assistant')", name="messages_role_check"),
+)
+
+conversation_turn_traces = Table(
+    "conversation_turn_traces",
+    metadata,
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
+    Column("conversation_id", PostgreSQLUUID(as_uuid=True), nullable=False, index=True),
+    Column("user_id", String(64), nullable=False, index=True),
+    Column("user_message_id", BigInteger),
+    Column("assistant_message_id", BigInteger),
+    Column("route", String(32), nullable=False, index=True),
+    Column("topic", String(64), nullable=False, index=True),
+    Column("confidence", Numeric(5, 4), nullable=False),
+    Column("entities", JSONB, nullable=False),
+    Column("missing_fields", JSONB, nullable=False),
+    Column("handling_result", String(64), nullable=False, index=True),
+    Column("is_inactive_reset", Boolean, nullable=False, server_default="false"),
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    ),
 )
 
 
@@ -279,6 +304,37 @@ class ConversationRepository:
             user_message=_message_from_row(user_row),
             assistant_message=_message_from_row(assistant_row),
         )
+
+    async def record_turn_trace(
+        self,
+        *,
+        conversation_id: UUID,
+        user_id: str,
+        user_message_id: int | None,
+        assistant_message_id: int | None,
+        route: str,
+        topic: str,
+        confidence: float,
+        entities: dict[str, str],
+        missing_fields: tuple[str, ...],
+        handling_result: str,
+        is_inactive_reset: bool,
+    ) -> None:
+        statement = insert(conversation_turn_traces).values(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message_id,
+            route=route,
+            topic=topic,
+            confidence=confidence,
+            entities=entities,
+            missing_fields=list(missing_fields),
+            handling_result=handling_result,
+            is_inactive_reset=is_inactive_reset,
+        )
+        async with self.engine.begin() as connection:
+            await connection.execute(statement)
 
     async def get_recent_messages(
         self,

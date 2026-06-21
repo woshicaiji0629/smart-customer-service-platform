@@ -25,7 +25,10 @@ async def run(*, reset_conversations: bool = False) -> None:
         await conversation_repository.close()
         await knowledge_repository.close()
     reset_message = "（会话表已重建）" if reset_conversations else ""
-    print(f"数据库初始化完成：vector、知识库表、会话表、模型用量表{reset_message}")
+    print(
+        f"数据库初始化完成：vector、知识库表、会话与链路追踪表、"
+        f"模型用量表{reset_message}"
+    )
 
 
 def _parse_args() -> argparse.Namespace:

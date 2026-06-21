@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from customer_service.business.service import (
     DepositLookup,
@@ -49,6 +53,13 @@ INACTIVE_CONVERSATION_NOTICE = (
     "由于你超过 5 分钟未回复，之前的问题已自动关闭。"
     "我们将按新的问题重新处理。"
 )
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class IntentAnswer:
+    answer: RagAnswer
+    handling_result: str
 
 
 class ConversationService:
@@ -124,12 +135,13 @@ class ConversationService:
             RagHistoryMessage(role=message.role, content=message.content)
             for message in active_messages
         ]
-        answer = await self._answer_for_intent(
+        intent_answer = await self._answer_for_intent(
             user_id,
             normalized_content,
             decision,
             rag_history,
         )
+        answer = intent_answer.answer
         if is_inactive:
             answer = RagAnswer(
                 answer=f"{INACTIVE_CONVERSATION_NOTICE}\n\n{answer.answer}",
@@ -143,13 +155,22 @@ class ConversationService:
             }
             for source in answer.sources
         ]
-        return await self._repository.save_turn(
+        turn = await self._repository.save_turn(
             conversation_id=conversation_id,
             user_id=user_id,
             user_content=normalized_content,
             assistant_content=answer.answer,
             assistant_sources=sources,
         )
+        await self._record_turn_trace(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            turn=turn,
+            decision=decision,
+            handling_result=intent_answer.handling_result,
+            is_inactive_reset=is_inactive,
+        )
+        return turn
 
     async def _answer_for_intent(
         self,
@@ -157,28 +178,90 @@ class ConversationService:
         content: str,
         decision: IntentDecision,
         history: list[RagHistoryMessage],
-    ) -> RagAnswer:
+    ) -> IntentAnswer:
         if decision.route == "business_query" and decision.topic == "withdrawal":
             order_id = decision.entities.get("order_id")
             if not order_id or "order_id" in decision.missing_fields:
-                return RagAnswer(answer=WITHDRAWAL_ORDER_ID_PROMPT, sources=[])
+                return IntentAnswer(
+                    answer=RagAnswer(answer=WITHDRAWAL_ORDER_ID_PROMPT, sources=[]),
+                    handling_result="missing_withdrawal_order_id",
+                )
             withdrawal = self._withdrawal_service.get_withdrawal(user_id, order_id)
-            return RagAnswer(answer=_withdrawal_answer(order_id, withdrawal), sources=[])
+            return IntentAnswer(
+                answer=RagAnswer(
+                    answer=_withdrawal_answer(order_id, withdrawal),
+                    sources=[],
+                ),
+                handling_result=(
+                    "business_withdrawal_found"
+                    if withdrawal is not None
+                    else "business_withdrawal_not_found"
+                ),
+            )
         if decision.topic == "deposit":
             txid = decision.entities.get("txid") or extract_deposit_txid(content)
             if not txid:
-                return RagAnswer(answer=DEPOSIT_TXID_PROMPT, sources=[])
+                return IntentAnswer(
+                    answer=RagAnswer(answer=DEPOSIT_TXID_PROMPT, sources=[]),
+                    handling_result="missing_deposit_txid",
+                )
             deposit = self._deposit_service.get_deposit(user_id, txid)
-            return RagAnswer(answer=_deposit_answer(txid, deposit), sources=[])
+            return IntentAnswer(
+                answer=RagAnswer(answer=_deposit_answer(txid, deposit), sources=[]),
+                handling_result=(
+                    "business_deposit_found"
+                    if deposit is not None
+                    else "business_deposit_not_found"
+                ),
+            )
         if decision.route == "out_of_scope":
-            return RagAnswer(answer=OUT_OF_SCOPE_ANSWER, sources=[])
+            return IntentAnswer(
+                answer=RagAnswer(answer=OUT_OF_SCOPE_ANSWER, sources=[]),
+                handling_result="out_of_scope",
+            )
         if decision.route == "human_request":
-            return RagAnswer(answer=HUMAN_REQUEST_PROMPT, sources=[])
+            return IntentAnswer(
+                answer=RagAnswer(answer=HUMAN_REQUEST_PROMPT, sources=[]),
+                handling_result="human_request",
+            )
         if decision.route == "unknown":
-            return RagAnswer(answer=UNKNOWN_INTENT_PROMPT, sources=[])
+            return IntentAnswer(
+                answer=RagAnswer(answer=UNKNOWN_INTENT_PROMPT, sources=[]),
+                handling_result="unknown",
+            )
         if self._rag_service is None:
             raise RagUnavailableError
-        return await self._rag_service.answer(content, history=history)
+        return IntentAnswer(
+            answer=await self._rag_service.answer(content, history=history),
+            handling_result="rag_answer",
+        )
+
+    async def _record_turn_trace(
+        self,
+        *,
+        conversation_id: UUID,
+        user_id: str,
+        turn: ConversationTurn,
+        decision: IntentDecision,
+        handling_result: str,
+        is_inactive_reset: bool,
+    ) -> None:
+        try:
+            await self._repository.record_turn_trace(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                user_message_id=turn.user_message.message_id,
+                assistant_message_id=turn.assistant_message.message_id,
+                route=decision.route,
+                topic=decision.topic,
+                confidence=decision.confidence,
+                entities=decision.entities,
+                missing_fields=decision.missing_fields,
+                handling_result=handling_result,
+                is_inactive_reset=is_inactive_reset,
+            )
+        except SQLAlchemyError:
+            logger.exception("failed_to_record_conversation_turn_trace")
 
     async def get_history(
         self,

@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from customer_service.auth.api import get_current_user
@@ -27,6 +28,7 @@ from customer_service.conversations.repository import (
     ConversationTurn,
     MessageRecord,
     _conversation_title,
+    conversation_turn_traces,
     conversations,
     messages,
 )
@@ -111,11 +113,14 @@ class FakeConversationRepository:
         *,
         exists: bool = True,
         recent_messages: list[MessageRecord] | None = None,
+        trace_error: bool = False,
     ) -> None:
         self.exists = exists
         self.recent_messages = recent_messages or []
+        self.trace_error = trace_error
         self.recent_limit: int | None = None
         self.saved: dict[str, object] | None = None
+        self.traces: list[dict[str, object]] = []
         self.checked_user_id: str | None = None
         self.list_limit: int | None = None
         self.list_cursor: ConversationCursor | None = None
@@ -155,6 +160,11 @@ class FakeConversationRepository:
     async def save_turn(self, **values: object) -> ConversationTurn:
         self.saved = values
         return _turn()
+
+    async def record_turn_trace(self, **values: object) -> None:
+        if self.trace_error:
+            raise SQLAlchemyError("trace database unavailable")
+        self.traces.append(values)
 
     async def get_recent_messages(
         self,
@@ -242,6 +252,21 @@ def test_conversation_schema_has_expected_columns() -> None:
         "sources",
         "created_at",
     }
+    assert set(conversation_turn_traces.c.keys()) == {
+        "id",
+        "conversation_id",
+        "user_id",
+        "user_message_id",
+        "assistant_message_id",
+        "route",
+        "topic",
+        "confidence",
+        "entities",
+        "missing_fields",
+        "handling_result",
+        "is_inactive_reset",
+        "created_at",
+    }
 
 
 def test_conversation_service_saves_complete_turn_after_rag() -> None:
@@ -276,6 +301,21 @@ def test_conversation_service_saves_complete_turn_after_rag() -> None:
             }
         ],
     }
+    assert repository.traces == [
+        {
+            "conversation_id": CONVERSATION_ID,
+            "user_id": USER_ID,
+            "user_message_id": 1,
+            "assistant_message_id": 2,
+            "route": "knowledge_rag",
+            "topic": "other",
+            "confidence": 1.0,
+            "entities": {},
+            "missing_fields": (),
+            "handling_result": "rag_answer",
+            "is_inactive_reset": False,
+        }
+    ]
     assert turn.assistant_message.role == "assistant"
 
 
@@ -536,6 +576,8 @@ def test_conversation_service_closes_inactive_context_before_rag() -> None:
     assert str(repository.saved["assistant_content"]).startswith(
         "由于你超过 5 分钟未回复，之前的问题已自动关闭。"
     )
+    assert repository.traces[0]["handling_result"] == "rag_answer"
+    assert repository.traces[0]["is_inactive_reset"] is True
 
 
 def test_conversation_service_routes_order_id_to_business_query() -> None:
@@ -557,6 +599,10 @@ def test_conversation_service_routes_order_id_to_business_query() -> None:
         "网络 TRC20，更新时间 2026-06-20T10:30:00+08:00。"
     )
     assert repository.saved["assistant_sources"] == []
+    assert repository.traces[0]["route"] == "business_query"
+    assert repository.traces[0]["topic"] == "withdrawal"
+    assert repository.traces[0]["entities"] == {"order_id": "WD-10001"}
+    assert repository.traces[0]["handling_result"] == "business_withdrawal_found"
 
 
 def test_conversation_service_requests_order_id_for_tracking_query() -> None:
@@ -583,6 +629,8 @@ def test_conversation_service_requests_order_id_for_tracking_query() -> None:
         "请提供提现订单号，例如 WD-10001，我可以帮你查询处理状态。"
     )
     assert repository.saved["assistant_sources"] == []
+    assert repository.traces[0]["handling_result"] == "missing_withdrawal_order_id"
+    assert repository.traces[0]["missing_fields"] == ("order_id",)
 
 
 def test_conversation_service_requests_txid_for_deposit_query() -> None:
@@ -601,6 +649,8 @@ def test_conversation_service_requests_txid_for_deposit_query() -> None:
         "请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。"
     )
     assert repository.saved["assistant_sources"] == []
+    assert repository.traces[0]["topic"] == "deposit"
+    assert repository.traces[0]["handling_result"] == "missing_deposit_txid"
 
 
 def test_conversation_service_routes_deposit_txid_to_business_query() -> None:
@@ -620,6 +670,7 @@ def test_conversation_service_routes_deposit_txid_to_business_query() -> None:
         "网络 TRC20，更新时间 2026-06-20T12:30:00+08:00。"
     )
     assert repository.saved["assistant_sources"] == []
+    assert repository.traces[0]["handling_result"] == "business_deposit_found"
 
 
 def test_conversation_service_does_not_expose_another_users_deposit() -> None:
@@ -639,6 +690,7 @@ def test_conversation_service_does_not_expose_another_users_deposit() -> None:
         "请确认 TxID、充值网络和到账账户是否正确。"
     )
     assert repository.saved["assistant_sources"] == []
+    assert repository.traces[0]["handling_result"] == "business_deposit_not_found"
 
 
 def test_conversation_service_keeps_pending_deposit_context() -> None:
@@ -784,6 +836,25 @@ def test_conversation_service_clarifies_unknown_intent_without_model() -> None:
     assert repository.saved["assistant_content"] == (
         "请补充说明你遇到的具体问题、操作步骤或页面提示。"
     )
+    assert repository.traces[0]["route"] == "unknown"
+    assert repository.traces[0]["handling_result"] == "unknown"
+
+
+def test_conversation_service_keeps_response_when_trace_write_fails() -> None:
+    repository = FakeConversationRepository(trace_error=True)
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    turn = asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "查询 WD-10001"))
+
+    assert turn.assistant_message.role == "assistant"
+    assert repository.saved is not None
+    assert "提现订单 WD-10001" in str(repository.saved["assistant_content"])
+    assert repository.traces == []
 
 
 def test_conversation_service_rejects_rag_question_when_unconfigured() -> None:
@@ -825,6 +896,7 @@ def test_conversation_service_does_not_expose_another_users_order() -> None:
     assert repository.saved["assistant_content"] == (
         "未找到当前用户的提现订单 WD-10002。"
     )
+    assert repository.traces[0]["handling_result"] == "business_withdrawal_not_found"
 
 
 class FakeConversationService:
