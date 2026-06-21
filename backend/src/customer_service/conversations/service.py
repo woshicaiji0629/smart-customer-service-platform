@@ -179,7 +179,7 @@ class ConversationService:
         decision: IntentDecision,
         history: list[RagHistoryMessage],
     ) -> IntentAnswer:
-        if decision.route == "business_query" and decision.topic == "withdrawal":
+        if decision.route == "business_query" and decision.category == "withdrawal":
             order_id = decision.entities.get("order_id")
             if not order_id or "order_id" in decision.missing_fields:
                 return IntentAnswer(
@@ -198,7 +198,7 @@ class ConversationService:
                     else "business_withdrawal_not_found"
                 ),
             )
-        if decision.topic == "deposit":
+        if decision.category == "deposit":
             txid = decision.entities.get("txid") or extract_deposit_txid(content)
             if not txid:
                 return IntentAnswer(
@@ -253,8 +253,8 @@ class ConversationService:
                 user_message_id=turn.user_message.message_id,
                 assistant_message_id=turn.assistant_message.message_id,
                 route=decision.route,
-                topic=decision.topic,
-                intent_code=decision.intent_code,
+                category=decision.category,
+                intent=decision.intent,
                 confidence=decision.confidence,
                 entities=decision.entities,
                 missing_fields=decision.missing_fields,
@@ -295,21 +295,21 @@ def _apply_pending_intent(
 ) -> IntentDecision:
     if decision.route != "unknown":
         return decision
-    pending_topic = _pending_topic_from_history(history)
-    if pending_topic == "deposit":
+    pending_category = _pending_category_from_history(history)
+    if pending_category == "deposit":
         return IntentDecision(
             route="business_query",
-            topic="deposit",
-            intent_code="deposit_status_query",
+            category="deposit",
+            intent="status_query",
             confidence=1.0,
             entities={},
             missing_fields=("txid",),
         )
-    if pending_topic == "withdrawal":
+    if pending_category == "withdrawal":
         return IntentDecision(
             route="business_query",
-            topic="withdrawal",
-            intent_code="withdrawal_status_query",
+            category="withdrawal",
+            intent="status_query",
             confidence=1.0,
             entities={},
             missing_fields=("order_id",),
@@ -317,7 +317,7 @@ def _apply_pending_intent(
     return decision
 
 
-def _pending_topic_from_history(history: list[MessageRecord]) -> str | None:
+def _pending_category_from_history(history: list[MessageRecord]) -> str | None:
     for message in reversed(history):
         role = getattr(message, "role", None)
         content = getattr(message, "content", "")

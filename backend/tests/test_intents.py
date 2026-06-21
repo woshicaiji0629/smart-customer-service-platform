@@ -32,8 +32,8 @@ def test_rules_extract_withdrawal_order_without_model_call() -> None:
     decision = asyncio.run(service.recognize("帮我查询 wd-10001"))
 
     assert decision.route == "business_query"
-    assert decision.topic == "withdrawal"
-    assert decision.intent_code == "withdrawal_status_query"
+    assert decision.category == "withdrawal"
+    assert decision.intent == "status_query"
     assert decision.entities == {"order_id": "WD-10001"}
     assert decision.missing_fields == ()
     assert classifier.messages == []
@@ -46,8 +46,8 @@ def test_rules_extract_deposit_txid_without_model_call() -> None:
     decision = asyncio.run(service.recognize("帮我查询 tx-10001"))
 
     assert decision.route == "business_query"
-    assert decision.topic == "deposit"
-    assert decision.intent_code == "deposit_status_query"
+    assert decision.category == "deposit"
+    assert decision.intent == "status_query"
     assert decision.entities == {"txid": "TX-10001"}
     assert decision.missing_fields == ()
     assert classifier.messages == []
@@ -59,14 +59,14 @@ def test_rules_request_missing_withdrawal_order() -> None:
     )
 
     assert decision.route == "business_query"
-    assert decision.intent_code == "withdrawal_missing_arrival"
+    assert decision.intent == "missing_arrival"
     assert decision.missing_fields == ("order_id",)
 
 
-def test_model_classifies_topic_and_extracts_entities_with_history() -> None:
+def test_model_classifies_category_and_extracts_entities_with_history() -> None:
     classifier = FakeClassifier(
-        '{"route":"knowledge_rag","topic":"identity_verification",'
-        '"intent_code":"identity_verification_failure",'
+        '{"route":"knowledge_rag","category":"identity_verification",'
+        '"intent":"verification_failure",'
         '"confidence":0.92,"entities":{"verification_type":"个人认证",'
         '"failure_reason":"证件模糊"},"missing_fields":[]}'
     )
@@ -84,8 +84,8 @@ def test_model_classifies_topic_and_extracts_entities_with_history() -> None:
         )
     )
 
-    assert decision.topic == "identity_verification"
-    assert decision.intent_code == "identity_verification_failure"
+    assert decision.category == "identity_verification"
+    assert decision.intent == "verification_failure"
     assert decision.entities == {
         "verification_type": "个人认证",
         "failure_reason": "证件模糊",
@@ -96,8 +96,8 @@ def test_model_classifies_topic_and_extracts_entities_with_history() -> None:
 
 def test_low_confidence_result_falls_back_to_unknown() -> None:
     classifier = FakeClassifier(
-        '{"route":"knowledge_rag","topic":"deposit",'
-        '"intent_code":"deposit_missing_arrival","confidence":0.2,'
+        '{"route":"knowledge_rag","category":"deposit",'
+        '"intent":"missing_arrival","confidence":0.2,'
         '"entities":{},"missing_fields":[]}'
     )
 
@@ -109,8 +109,8 @@ def test_low_confidence_result_falls_back_to_unknown() -> None:
 
 def test_invalid_or_unexpected_fields_fall_back_to_unknown() -> None:
     classifier = FakeClassifier(
-        '{"route":"knowledge_rag","topic":"deposit",'
-        '"intent_code":"deposit_missing_arrival","confidence":0.9,'
+        '{"route":"knowledge_rag","category":"deposit",'
+        '"intent":"missing_arrival","confidence":0.9,'
         '"entities":{"password":"secret"},"missing_fields":[]}'
     )
 
@@ -122,22 +122,22 @@ def test_invalid_or_unexpected_fields_fall_back_to_unknown() -> None:
 
 def test_non_withdrawal_business_route_is_forced_to_rag() -> None:
     classifier = FakeClassifier(
-        '{"route":"business_query","topic":"account_security",'
-        '"intent_code":"account_security_compromised",'
+        '{"route":"business_query","category":"account_security",'
+        '"intent":"compromised",'
         '"confidence":0.9,"entities":{},"missing_fields":[]}'
     )
 
     decision = asyncio.run(IntentService(classifier).recognize("我的账户被盗了"))
 
     assert decision.route == "knowledge_rag"
-    assert decision.topic == "account_security"
-    assert decision.intent_code == "account_security_compromised"
+    assert decision.category == "account_security"
+    assert decision.intent == "compromised"
 
 
 def test_concrete_issue_is_preferred_over_human_request() -> None:
     classifier = FakeClassifier(
-        '{"route":"human_request","topic":"identity_verification",'
-        '"intent_code":"identity_verification_failure",'
+        '{"route":"human_request","category":"identity_verification",'
+        '"intent":"verification_failure",'
         '"confidence":0.9,"entities":{},"missing_fields":[]}'
     )
 
@@ -148,18 +148,18 @@ def test_concrete_issue_is_preferred_over_human_request() -> None:
     assert decision.route == "knowledge_rag"
 
 
-def test_human_only_request_is_normalized_to_other_topic() -> None:
+def test_human_only_request_is_normalized_to_other_category() -> None:
     classifier = FakeClassifier(
-        '{"route":"human_request","topic":"general_platform",'
-        '"intent_code":"general_platform_operation",'
+        '{"route":"human_request","category":"general_platform",'
+        '"intent":"platform_operation",'
         '"confidence":0.9,"entities":{},"missing_fields":[]}'
     )
 
     decision = asyncio.run(IntentService(classifier).recognize("我要找人工客服"))
 
     assert decision.route == "human_request"
-    assert decision.topic == "other"
-    assert decision.intent_code == "human_only"
+    assert decision.category == "other"
+    assert decision.intent == "human_only"
     assert classifier.messages == []
 
 
@@ -167,13 +167,13 @@ def test_unconfigured_model_returns_unknown_for_non_rule_query() -> None:
     decision = asyncio.run(IntentService(None).recognize("实名认证失败"))
 
     assert decision.route == "unknown"
-    assert decision.intent_code == "unknown"
+    assert decision.intent == "unknown"
 
 
 def test_generic_withdrawal_failure_uses_model_instead_of_business_rule() -> None:
     classifier = FakeClassifier(
-        '{"route":"knowledge_rag","topic":"withdrawal",'
-        '"intent_code":"withdrawal_failure_reason","confidence":0.9,'
+        '{"route":"knowledge_rag","category":"withdrawal",'
+        '"intent":"failure_reason","confidence":0.9,'
         '"entities":{},"missing_fields":[]}'
     )
 
@@ -182,14 +182,14 @@ def test_generic_withdrawal_failure_uses_model_instead_of_business_rule() -> Non
     )
 
     assert decision.route == "knowledge_rag"
-    assert decision.topic == "withdrawal"
+    assert decision.category == "withdrawal"
     assert classifier.messages == []
 
 
 def test_human_request_with_withdrawal_issue_uses_model() -> None:
     classifier = FakeClassifier(
-        '{"route":"knowledge_rag","topic":"withdrawal",'
-        '"intent_code":"withdrawal_failure_reason","confidence":0.9,'
+        '{"route":"knowledge_rag","category":"withdrawal",'
+        '"intent":"failure_reason","confidence":0.9,'
         '"entities":{},"missing_fields":[]}'
     )
 
@@ -198,11 +198,11 @@ def test_human_request_with_withdrawal_issue_uses_model() -> None:
     )
 
     assert decision.route == "knowledge_rag"
-    assert decision.topic == "withdrawal"
+    assert decision.category == "withdrawal"
     assert classifier.messages == []
 
 
-def test_topic_rules_cover_common_high_confidence_queries() -> None:
+def test_category_rules_cover_common_high_confidence_queries() -> None:
     cases = [
         ("这个币暂停充值了", "deposit"),
         ("发现陌生登录，请马上告诉我怎么冻结账户", "account_security"),
@@ -210,29 +210,29 @@ def test_topic_rules_cover_common_high_confidence_queries() -> None:
         ("如何导出我的账户数据", "general_platform"),
     ]
 
-    for query, expected_topic in cases:
+    for query, expected_category in cases:
         decision = asyncio.run(IntentService(None).recognize(query))
 
         assert decision.route == "knowledge_rag"
-        assert decision.topic == expected_topic
+        assert decision.category == expected_category
 
 
 def test_model_withdrawal_business_guess_for_generic_question_is_forced_to_rag() -> None:
     classifier = FakeClassifier(
-        '{"route":"business_query","topic":"withdrawal",'
-        '"intent_code":"withdrawal_failure_reason","confidence":0.9,'
+        '{"route":"business_query","category":"withdrawal",'
+        '"intent":"failure_reason","confidence":0.9,'
         '"entities":{},"missing_fields":["order_id"]}'
     )
 
     decision = asyncio.run(IntentService(classifier).recognize("提现为什么失败"))
 
     assert decision.route == "knowledge_rag"
-    assert decision.topic == "withdrawal"
+    assert decision.category == "withdrawal"
 
 
 def test_ambiguous_failure_without_history_remains_unknown() -> None:
     classifier = FakeClassifier(
-        '{"route":"unknown","topic":"other","intent_code":"unknown","confidence":0.9,'
+        '{"route":"unknown","category":"other","intent":"unknown","confidence":0.9,'
         '"entities":{},"missing_fields":[]}'
     )
 
@@ -243,7 +243,7 @@ def test_ambiguous_failure_without_history_remains_unknown() -> None:
 
 def test_generic_page_error_remains_unknown() -> None:
     classifier = FakeClassifier(
-        '{"route":"unknown","topic":"other","intent_code":"unknown","confidence":0.9,'
+        '{"route":"unknown","category":"other","intent":"unknown","confidence":0.9,'
         '"entities":{},"missing_fields":[]}'
     )
 
@@ -256,7 +256,7 @@ def test_default_intent_evaluation_cases_are_valid() -> None:
     cases = load_cases(DEFAULT_CASES_PATH)
 
     assert len(cases) == 60
-    assert {case.expected_topic for case in cases} >= {
+    assert {case.expected_category for case in cases} >= {
         "withdrawal",
         "identity_verification",
         "account_security",

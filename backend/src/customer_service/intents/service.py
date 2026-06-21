@@ -23,7 +23,7 @@ IntentRoute = Literal[
     "out_of_scope",
     "unknown",
 ]
-IntentTopic = Literal[
+IntentCategory = Literal[
     "withdrawal",
     "deposit",
     "identity_verification",
@@ -32,22 +32,19 @@ IntentTopic = Literal[
     "general_platform",
     "other",
 ]
-IntentCode = Literal[
-    "withdrawal_status_query",
-    "withdrawal_missing_arrival",
-    "withdrawal_failure_reason",
-    "withdrawal_fee_rule",
-    "withdrawal_rule",
-    "deposit_status_query",
-    "deposit_missing_arrival",
-    "deposit_memo_tag_issue",
-    "deposit_rule",
-    "identity_verification_failure",
-    "account_security_compromised",
-    "account_security_2fa_issue",
-    "account_security_general",
-    "spot_trading_question",
-    "general_platform_operation",
+IntentName = Literal[
+    "status_query",
+    "missing_arrival",
+    "failure_reason",
+    "fee_rule",
+    "rule",
+    "memo_tag_issue",
+    "verification_failure",
+    "compromised",
+    "two_factor_issue",
+    "security_general",
+    "trading_question",
+    "platform_operation",
     "human_only",
     "out_of_scope",
     "unknown",
@@ -56,7 +53,7 @@ IntentCode = Literal[
 VALID_ROUTES: Final = frozenset(
     {"business_query", "knowledge_rag", "human_request", "out_of_scope", "unknown"}
 )
-VALID_TOPICS: Final = frozenset(
+VALID_CATEGORIES: Final = frozenset(
     {
         "withdrawal",
         "deposit",
@@ -67,23 +64,20 @@ VALID_TOPICS: Final = frozenset(
         "other",
     }
 )
-VALID_INTENT_CODES: Final = frozenset(
+VALID_INTENTS: Final = frozenset(
     {
-        "withdrawal_status_query",
-        "withdrawal_missing_arrival",
-        "withdrawal_failure_reason",
-        "withdrawal_fee_rule",
-        "withdrawal_rule",
-        "deposit_status_query",
-        "deposit_missing_arrival",
-        "deposit_memo_tag_issue",
-        "deposit_rule",
-        "identity_verification_failure",
-        "account_security_compromised",
-        "account_security_2fa_issue",
-        "account_security_general",
-        "spot_trading_question",
-        "general_platform_operation",
+        "status_query",
+        "missing_arrival",
+        "failure_reason",
+        "fee_rule",
+        "rule",
+        "memo_tag_issue",
+        "verification_failure",
+        "compromised",
+        "two_factor_issue",
+        "security_general",
+        "trading_question",
+        "platform_operation",
         "human_only",
         "out_of_scope",
         "unknown",
@@ -105,7 +99,7 @@ WITHDRAWAL_KNOWLEDGE_TERMS: Final = (
     "规则",
     "手续费",
 )
-DEPOSIT_TOPIC_TERMS: Final = (
+DEPOSIT_CATEGORY_TERMS: Final = (
     "充值",
     "充币",
     "充幣",
@@ -139,8 +133,8 @@ INTENT_SYSTEM_PROMPT: Final = """你是交易所智能客服的意图识别器�
 
 JSON 字段：
 - route: business_query | knowledge_rag | human_request | out_of_scope | unknown
-- topic: withdrawal | deposit | identity_verification | account_security | spot_trading | general_platform | other
-- intent_code: withdrawal_status_query | withdrawal_missing_arrival | withdrawal_failure_reason | withdrawal_fee_rule | withdrawal_rule | deposit_status_query | deposit_missing_arrival | deposit_memo_tag_issue | deposit_rule | identity_verification_failure | account_security_compromised | account_security_2fa_issue | account_security_general | spot_trading_question | general_platform_operation | human_only | out_of_scope | unknown
+- category: withdrawal | deposit | identity_verification | account_security | spot_trading | general_platform | other
+- intent: status_query | missing_arrival | failure_reason | fee_rule | rule | memo_tag_issue | verification_failure | compromised | two_factor_issue | security_general | trading_question | platform_operation | human_only | out_of_scope | unknown
 - confidence: 0 到 1 的数字
 - entities: 只允许 order_id、txid、coin、network、verification_type、failure_reason，值必须是字符串
 - missing_fields: 当前问题继续自动处理前必须补充的字段名数组
@@ -156,7 +150,7 @@ JSON 字段：
 8. “页面报错了”“操作失败了”等未说明具体页面、功能或操作的泛化故障，使用 unknown。
 9. 提现失败原因、处理规则等通用问题使用 knowledge_rag；只有用户在查询自己的具体提现订单状态时才使用 business_query。
 
-主题边界：
+大类边界：
 - account_security：登录、密码、验证码、账户被盗和安全设置。
 - general_platform：账户数据导出、通用平台功能和不属于其他主题的使用问题。"""
 
@@ -179,8 +173,8 @@ class IntentHistoryMessage:
 @dataclass(frozen=True, slots=True)
 class IntentDecision:
     route: IntentRoute
-    topic: IntentTopic
-    intent_code: IntentCode
+    category: IntentCategory
+    intent: IntentName
     confidence: float
     entities: dict[str, str]
     missing_fields: tuple[str, ...]
@@ -241,8 +235,8 @@ def _recognize_with_rules(content: str) -> IntentDecision | None:
     if HUMAN_ONLY_RE.fullmatch(content):
         return IntentDecision(
             route="human_request",
-            topic="other",
-            intent_code="human_only",
+            category="other",
+            intent="human_only",
             confidence=1.0,
             entities={},
             missing_fields=(),
@@ -251,8 +245,8 @@ def _recognize_with_rules(content: str) -> IntentDecision | None:
     if order_id is not None:
         return IntentDecision(
             route="business_query",
-            topic="withdrawal",
-            intent_code="withdrawal_status_query",
+            category="withdrawal",
+            intent="status_query",
             confidence=1.0,
             entities={"order_id": order_id},
             missing_fields=(),
@@ -261,8 +255,8 @@ def _recognize_with_rules(content: str) -> IntentDecision | None:
     if txid is not None:
         return IntentDecision(
             route="business_query",
-            topic="deposit",
-            intent_code="deposit_status_query",
+            category="deposit",
+            intent="status_query",
             confidence=1.0,
             entities={"txid": txid},
             missing_fields=(),
@@ -270,25 +264,25 @@ def _recognize_with_rules(content: str) -> IntentDecision | None:
     if any(term in content for term in ACCOUNT_SECURITY_TOPIC_TERMS):
         return _knowledge_decision(
             "account_security",
-            _account_security_intent_code(content),
+            _account_security_intent(content),
         )
     if (
         ("提现" in content or "提現" in content)
         and any(term in content for term in WITHDRAWAL_KNOWLEDGE_TERMS)
     ):
-        return _knowledge_decision("withdrawal", _withdrawal_intent_code(content))
-    if any(term in lowered for term in DEPOSIT_TOPIC_TERMS):
-        return _knowledge_decision("deposit", _deposit_intent_code(content))
+        return _knowledge_decision("withdrawal", _withdrawal_intent(content))
+    if any(term in lowered for term in DEPOSIT_CATEGORY_TERMS):
+        return _knowledge_decision("deposit", _deposit_intent(content))
     if any(term in lowered for term in GENERAL_PLATFORM_TOPIC_TERMS):
         return _knowledge_decision(
             "general_platform",
-            "general_platform_operation",
+            "platform_operation",
         )
     if is_withdrawal_tracking_query(content):
         return IntentDecision(
             route="business_query",
-            topic="withdrawal",
-            intent_code="withdrawal_missing_arrival",
+            category="withdrawal",
+            intent="missing_arrival",
             confidence=1.0,
             entities={},
             missing_fields=("order_id",),
@@ -319,15 +313,15 @@ def _parse_decision(response: str) -> IntentDecision:
         raise TypeError("意图识别结果必须是对象")
 
     route = payload.get("route")
-    topic = payload.get("topic")
-    intent_code = payload.get("intent_code")
+    category = payload.get("category")
+    intent = payload.get("intent")
     confidence = payload.get("confidence")
     entities = payload.get("entities", {})
     missing_fields = payload.get("missing_fields", [])
     if (
         route not in VALID_ROUTES
-        or topic not in VALID_TOPICS
-        or intent_code not in VALID_INTENT_CODES
+        or category not in VALID_CATEGORIES
+        or intent not in VALID_INTENTS
     ):
         raise ValueError("意图识别枚举值无效")
     if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
@@ -350,8 +344,8 @@ def _parse_decision(response: str) -> IntentDecision:
         raise ValueError("missing_fields 包含无效字段")
     return IntentDecision(
         route=cast(IntentRoute, route),
-        topic=cast(IntentTopic, topic),
-        intent_code=cast(IntentCode, intent_code),
+        category=cast(IntentCategory, category),
+        intent=cast(IntentName, intent),
         confidence=float(confidence),
         entities=normalized_entities,
         missing_fields=tuple(missing_fields),
@@ -362,43 +356,43 @@ def _apply_routing_policy(content: str, decision: IntentDecision) -> IntentDecis
     if HUMAN_ONLY_RE.fullmatch(content):
         return IntentDecision(
             route="human_request",
-            topic="other",
-            intent_code="human_only",
+            category="other",
+            intent="human_only",
             confidence=decision.confidence,
             entities={},
             missing_fields=(),
         )
-    if decision.route == "business_query" and decision.topic not in {
+    if decision.route == "business_query" and decision.category not in {
         "withdrawal",
         "deposit",
     }:
         return IntentDecision(
             route="knowledge_rag",
-            topic=decision.topic,
-            intent_code=decision.intent_code,
+            category=decision.category,
+            intent=decision.intent,
             confidence=decision.confidence,
             entities=decision.entities,
             missing_fields=(),
         )
     if (
         decision.route == "business_query"
-        and decision.topic == "withdrawal"
+        and decision.category == "withdrawal"
         and "order_id" not in decision.entities
         and any(term in content for term in WITHDRAWAL_KNOWLEDGE_TERMS)
     ):
         return IntentDecision(
             route="knowledge_rag",
-            topic="withdrawal",
-            intent_code=decision.intent_code,
+            category="withdrawal",
+            intent=decision.intent,
             confidence=decision.confidence,
             entities=decision.entities,
             missing_fields=(),
         )
-    if decision.route == "human_request" and decision.topic != "other":
+    if decision.route == "human_request" and decision.category != "other":
         return IntentDecision(
             route="knowledge_rag",
-            topic=decision.topic,
-            intent_code=decision.intent_code,
+            category=decision.category,
+            intent=decision.intent,
             confidence=decision.confidence,
             entities=decision.entities,
             missing_fields=decision.missing_fields,
@@ -406,38 +400,41 @@ def _apply_routing_policy(content: str, decision: IntentDecision) -> IntentDecis
     return decision
 
 
-def _withdrawal_intent_code(content: str) -> IntentCode:
+def _withdrawal_intent(content: str) -> IntentName:
     if "手续费" in content:
-        return "withdrawal_fee_rule"
+        return "fee_rule"
     if "失败" in content or "什么原因" in content or "为什么" in content:
-        return "withdrawal_failure_reason"
+        return "failure_reason"
     if "到账" in content or "没到" in content or "未到" in content:
-        return "withdrawal_missing_arrival"
-    return "withdrawal_rule"
+        return "missing_arrival"
+    return "rule"
 
 
-def _deposit_intent_code(content: str) -> IntentCode:
+def _deposit_intent(content: str) -> IntentName:
     lowered = content.lower()
     if "memo" in lowered or "tag" in lowered:
-        return "deposit_memo_tag_issue"
+        return "memo_tag_issue"
     if "到账" in content or "没到" in content or "未到" in content:
-        return "deposit_missing_arrival"
-    return "deposit_rule"
+        return "missing_arrival"
+    return "rule"
 
 
-def _account_security_intent_code(content: str) -> IntentCode:
+def _account_security_intent(content: str) -> IntentName:
     if any(term in content for term in ("被盗", "陌生登录", "冻结账户", "解冻账户")):
-        return "account_security_compromised"
+        return "compromised"
     if any(term in content for term in ("谷歌验证器", "短信验证码", "邮箱被")):
-        return "account_security_2fa_issue"
-    return "account_security_general"
+        return "two_factor_issue"
+    return "security_general"
 
 
-def _knowledge_decision(topic: IntentTopic, intent_code: IntentCode) -> IntentDecision:
+def _knowledge_decision(
+    category: IntentCategory,
+    intent: IntentName,
+) -> IntentDecision:
     return IntentDecision(
         route="knowledge_rag",
-        topic=topic,
-        intent_code=intent_code,
+        category=category,
+        intent=intent,
         confidence=1.0,
         entities={},
         missing_fields=(),
@@ -447,8 +444,8 @@ def _knowledge_decision(topic: IntentTopic, intent_code: IntentCode) -> IntentDe
 def _unknown_decision() -> IntentDecision:
     return IntentDecision(
         route="unknown",
-        topic="other",
-        intent_code="unknown",
+        category="other",
+        intent="unknown",
         confidence=0.0,
         entities={},
         missing_fields=(),

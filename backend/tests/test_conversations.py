@@ -230,8 +230,8 @@ class FakeIntentRecognizer:
         self.history = history
         return IntentDecision(
             route="knowledge_rag",
-            topic="other",
-            intent_code="unknown",
+            category="other",
+            intent="unknown",
             confidence=1.0,
             entities={},
             missing_fields=(),
@@ -260,8 +260,8 @@ def test_conversation_schema_has_expected_columns() -> None:
         "user_message_id",
         "assistant_message_id",
         "route",
-        "topic",
-        "intent_code",
+        "category",
+        "intent",
         "confidence",
         "entities",
         "missing_fields",
@@ -310,8 +310,8 @@ def test_conversation_service_saves_complete_turn_after_rag() -> None:
             "user_message_id": 1,
             "assistant_message_id": 2,
             "route": "knowledge_rag",
-            "topic": "other",
-            "intent_code": "unknown",
+            "category": "other",
+            "intent": "unknown",
             "confidence": 1.0,
             "entities": {},
             "missing_fields": (),
@@ -603,7 +603,7 @@ def test_conversation_service_routes_order_id_to_business_query() -> None:
     )
     assert repository.saved["assistant_sources"] == []
     assert repository.traces[0]["route"] == "business_query"
-    assert repository.traces[0]["topic"] == "withdrawal"
+    assert repository.traces[0]["category"] == "withdrawal"
     assert repository.traces[0]["entities"] == {"order_id": "WD-10001"}
     assert repository.traces[0]["handling_result"] == "business_withdrawal_found"
 
@@ -652,7 +652,7 @@ def test_conversation_service_requests_txid_for_deposit_query() -> None:
         "请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。"
     )
     assert repository.saved["assistant_sources"] == []
-    assert repository.traces[0]["topic"] == "deposit"
+    assert repository.traces[0]["category"] == "deposit"
     assert repository.traces[0]["handling_result"] == "missing_deposit_txid"
 
 

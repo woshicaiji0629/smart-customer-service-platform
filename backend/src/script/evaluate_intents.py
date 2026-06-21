@@ -1,4 +1,4 @@
-"""Evaluate intent routing and topic classification against labeled cases."""
+"""Evaluate intent routing and category classification against labeled cases."""
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ from pathlib import Path
 from typing import Final, cast
 
 from customer_service.intents.service import (
+    IntentCategory,
     IntentRoute,
     IntentService,
-    IntentTopic,
+    VALID_CATEGORIES,
     VALID_ROUTES,
-    VALID_TOPICS,
 )
 from customer_service.knowledge.chat import DEFAULT_INTENT_MODEL, DashScopeChatClient
 from customer_service.knowledge.embeddings import DEFAULT_BASE_URL
@@ -33,7 +33,7 @@ class IntentEvaluationCase:
     case_id: str
     query: str
     expected_route: IntentRoute
-    expected_topic: IntentTopic
+    expected_category: IntentCategory
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
 async def run(args: argparse.Namespace) -> None:
     cases = load_cases(args.cases)
     correct_routes = 0
-    correct_topics = 0
+    correct_categories = 0
     correct_pairs = 0
     async with DashScopeChatClient(
         api_key=_required_env("DASHSCOPE_API_KEY"),
@@ -57,20 +57,21 @@ async def run(args: argparse.Namespace) -> None:
         for case in cases:
             decision = await service.recognize(case.query)
             route_ok = decision.route == case.expected_route
-            topic_ok = decision.topic == case.expected_topic
+            category_ok = decision.category == case.expected_category
             correct_routes += route_ok
-            correct_topics += topic_ok
-            correct_pairs += route_ok and topic_ok
+            correct_categories += category_ok
+            correct_pairs += route_ok and category_ok
             print(
-                f"[{case.case_id}] route={decision.route} topic={decision.topic} "
+                f"[{case.case_id}] route={decision.route} "
+                f"category={decision.category} intent={decision.intent} "
                 f"confidence={decision.confidence:.2f} "
-                f"expected={case.expected_route}/{case.expected_topic}"
+                f"expected={case.expected_route}/{case.expected_category}"
             )
     total = len(cases)
     print()
     print(f"cases={total}")
     print(f"route_accuracy={correct_routes / total:.3f}")
-    print(f"topic_accuracy={correct_topics / total:.3f}")
+    print(f"category_accuracy={correct_categories / total:.3f}")
     print(f"pair_accuracy={correct_pairs / total:.3f}")
 
 
@@ -91,12 +92,12 @@ def load_cases(path: Path) -> list[IntentEvaluationCase]:
         case_id = raw_case.get("id")
         query = raw_case.get("query")
         route = raw_case.get("expected_route")
-        topic = raw_case.get("expected_topic")
+        category = raw_case.get("expected_category", raw_case.get("expected_topic"))
         if not isinstance(case_id, str) or not case_id or case_id in seen_ids:
             raise ValueError(f"意图评估用例 id 无效或重复: {case_id!r}")
         if not isinstance(query, str) or not query.strip():
             raise ValueError(f"意图评估 query 无效: {case_id}")
-        if route not in VALID_ROUTES or topic not in VALID_TOPICS:
+        if route not in VALID_ROUTES or category not in VALID_CATEGORIES:
             raise ValueError(f"意图评估标签无效: {case_id}")
         seen_ids.add(case_id)
         cases.append(
@@ -104,7 +105,7 @@ def load_cases(path: Path) -> list[IntentEvaluationCase]:
                 case_id=case_id,
                 query=query.strip(),
                 expected_route=cast(IntentRoute, route),
-                expected_topic=cast(IntentTopic, topic),
+                expected_category=cast(IntentCategory, category),
             )
         )
     return cases
