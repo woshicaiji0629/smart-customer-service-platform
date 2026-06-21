@@ -78,5 +78,8 @@ def test_extract_withdrawal_order_id_requires_explicit_mock_id() -> None:
 def test_withdrawal_tracking_query_requires_withdrawal_and_status_term() -> None:
     assert is_withdrawal_tracking_query("提现完成但钱包没到账怎么办？") is True
     assert is_withdrawal_tracking_query("帮我查询提现进度") is True
+    assert is_withdrawal_tracking_query("我的提现还在处理中") is True
     assert is_withdrawal_tracking_query("提现手续费是多少？") is False
+    assert is_withdrawal_tracking_query("提现失败一般是什么原因？") is False
+    assert is_withdrawal_tracking_query("帮我转人工处理提现失败的问题") is False
     assert is_withdrawal_tracking_query("充值完成了吗？") is False

@@ -86,7 +86,7 @@ def test_invalid_or_unexpected_fields_fall_back_to_unknown() -> None:
         '"entities":{"password":"secret"},"missing_fields":[]}'
     )
 
-    decision = asyncio.run(IntentService(classifier).recognize("充值问题"))
+    decision = asyncio.run(IntentService(classifier).recognize("业务问题"))
 
     assert decision.route == "unknown"
     assert decision.entities == {}
@@ -132,6 +132,85 @@ def test_human_only_request_is_normalized_to_other_topic() -> None:
 
 def test_unconfigured_model_returns_unknown_for_non_rule_query() -> None:
     decision = asyncio.run(IntentService(None).recognize("实名认证失败"))
+
+    assert decision.route == "unknown"
+
+
+def test_generic_withdrawal_failure_uses_model_instead_of_business_rule() -> None:
+    classifier = FakeClassifier(
+        '{"route":"knowledge_rag","topic":"withdrawal","confidence":0.9,'
+        '"entities":{},"missing_fields":[]}'
+    )
+
+    decision = asyncio.run(
+        IntentService(classifier).recognize("提现失败一般是什么原因？")
+    )
+
+    assert decision.route == "knowledge_rag"
+    assert decision.topic == "withdrawal"
+    assert classifier.messages == []
+
+
+def test_human_request_with_withdrawal_issue_uses_model() -> None:
+    classifier = FakeClassifier(
+        '{"route":"knowledge_rag","topic":"withdrawal","confidence":0.9,'
+        '"entities":{},"missing_fields":[]}'
+    )
+
+    decision = asyncio.run(
+        IntentService(classifier).recognize("帮我转人工处理提现失败的问题")
+    )
+
+    assert decision.route == "knowledge_rag"
+    assert decision.topic == "withdrawal"
+    assert classifier.messages == []
+
+
+def test_topic_rules_cover_common_high_confidence_queries() -> None:
+    cases = [
+        ("这个币暂停充值了", "deposit"),
+        ("发现陌生登录，请马上告诉我怎么冻结账户", "account_security"),
+        ("手机丢了，谷歌验证器怎么解绑", "account_security"),
+        ("如何导出我的账户数据", "general_platform"),
+    ]
+
+    for query, expected_topic in cases:
+        decision = asyncio.run(IntentService(None).recognize(query))
+
+        assert decision.route == "knowledge_rag"
+        assert decision.topic == expected_topic
+
+
+def test_model_withdrawal_business_guess_for_generic_question_is_forced_to_rag() -> None:
+    classifier = FakeClassifier(
+        '{"route":"business_query","topic":"withdrawal","confidence":0.9,'
+        '"entities":{},"missing_fields":["order_id"]}'
+    )
+
+    decision = asyncio.run(IntentService(classifier).recognize("提现为什么失败"))
+
+    assert decision.route == "knowledge_rag"
+    assert decision.topic == "withdrawal"
+
+
+def test_ambiguous_failure_without_history_remains_unknown() -> None:
+    classifier = FakeClassifier(
+        '{"route":"unknown","topic":"other","confidence":0.9,'
+        '"entities":{},"missing_fields":[]}'
+    )
+
+    decision = asyncio.run(IntentService(classifier).recognize("还是失败"))
+
+    assert decision.route == "unknown"
+
+
+def test_generic_page_error_remains_unknown() -> None:
+    classifier = FakeClassifier(
+        '{"route":"unknown","topic":"other","confidence":0.9,'
+        '"entities":{},"missing_fields":[]}'
+    )
+
+    decision = asyncio.run(IntentService(classifier).recognize("页面报错了怎么办"))
 
     assert decision.route == "unknown"
 

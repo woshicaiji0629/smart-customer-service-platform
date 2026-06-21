@@ -17,6 +17,26 @@ WITHDRAWAL_TRACKING_TERMS: Final = (
     "成功",
     "失败",
 )
+WITHDRAWAL_PERSONAL_TERMS: Final = (
+    "我的",
+    "我这",
+    "帮我查",
+    "帮我查询",
+    "查询",
+    "查一下",
+    "进度",
+    "状态",
+    "没到账",
+)
+WITHDRAWAL_KNOWLEDGE_TERMS: Final = (
+    "一般",
+    "通常",
+    "为什么",
+    "什么原因",
+    "怎么处理",
+    "规则",
+    "手续费",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,8 +95,11 @@ def extract_withdrawal_order_id(content: str) -> str | None:
 
 
 def is_withdrawal_tracking_query(content: str) -> bool:
-    return "提现" in content and any(
-        term in content for term in WITHDRAWAL_TRACKING_TERMS
+    return (
+        "提现" in content
+        and any(term in content for term in WITHDRAWAL_TRACKING_TERMS)
+        and any(term in content for term in WITHDRAWAL_PERSONAL_TERMS)
+        and not any(term in content for term in WITHDRAWAL_KNOWLEDGE_TERMS)
     )
 
 
