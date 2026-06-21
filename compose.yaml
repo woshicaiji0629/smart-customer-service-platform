@@ -35,6 +35,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://customer_service:${POSTGRES_PASSWORD:-customer_service_dev}@postgres:5432/smart_customer_service
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_INTENT_MODEL: ${DASHSCOPE_INTENT_MODEL:-qwen-flash}
       MOCK_AUTH_ENABLED: "true"
       REDIS_URL: redis://redis:6379/0
       SESSION_COOKIE_SECURE: "false"

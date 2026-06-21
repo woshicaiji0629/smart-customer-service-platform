@@ -108,6 +108,42 @@ def test_chat_client_calls_compatible_api() -> None:
     }
 
 
+def test_chat_client_requests_json_mode() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": '{"route":"unknown"}'}}]},
+        )
+
+    async def run() -> str:
+        client = DashScopeChatClient(
+            api_key="test",
+            model="qwen-flash",
+            json_mode=True,
+        )
+        await client._client.aclose()
+        client._client = httpx.AsyncClient(
+            base_url="https://example.com/v1/",
+            transport=httpx.MockTransport(handler),
+        )
+        async with client:
+            return await client.complete(
+                [{"role": "user", "content": "请按 JSON 格式输出"}]
+            )
+
+    answer = asyncio.run(run())
+
+    assert answer == '{"route":"unknown"}'
+    assert json.loads(captured[0].content) == {
+        "model": "qwen-flash",
+        "messages": [{"role": "user", "content": "请按 JSON 格式输出"}],
+        "response_format": {"type": "json_object"},
+    }
+
+
 def test_rag_service_builds_grounded_prompt_and_deduplicates_sources() -> None:
     search_service = FakeSearchService()
     chat_client = FakeChatClient()

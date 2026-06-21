@@ -29,12 +29,14 @@ from customer_service.knowledge.embeddings import (
 )
 from customer_service.knowledge.chat import (
     DEFAULT_CHAT_MODEL,
+    DEFAULT_INTENT_MODEL,
     ChatCompletionError,
     DashScopeChatClient,
 )
 from customer_service.knowledge.rag import RagCitationError, RagService
 from customer_service.knowledge.repository import MAX_SEARCH_LIMIT, KnowledgeRepository
 from customer_service.knowledge.service import KnowledgeSearchService
+from customer_service.intents.service import IntentService
 
 
 LOCAL_FRONTEND_ORIGINS = [
@@ -77,6 +79,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             stack.push_async_callback(conversation_repository.close)
 
             rag_service: RagService | None = None
+            intent_classifier = None
             api_key = os.getenv("DASHSCOPE_API_KEY")
             if api_key:
                 knowledge_repository = KnowledgeRepository(database_url)
@@ -97,6 +100,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                         model=os.getenv("DASHSCOPE_CHAT_MODEL", DEFAULT_CHAT_MODEL),
                     )
                 )
+                intent_classifier = await stack.enter_async_context(
+                    DashScopeChatClient(
+                        api_key=api_key,
+                        base_url=base_url,
+                        model=os.getenv(
+                            "DASHSCOPE_INTENT_MODEL",
+                            DEFAULT_INTENT_MODEL,
+                        ),
+                        json_mode=True,
+                    )
+                )
                 app.state.knowledge_search_service = KnowledgeSearchService(
                     repository=knowledge_repository,
                     embedding_client=embedding_client,
@@ -111,6 +125,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 repository=conversation_repository,
                 rag_service=rag_service,
                 withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+                intent_service=IntentService(intent_classifier),
             )
             yield
     finally:

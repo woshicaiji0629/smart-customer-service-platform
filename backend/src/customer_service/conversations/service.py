@@ -7,8 +7,6 @@ from uuid import UUID
 from customer_service.business.service import (
     WithdrawalLookup,
     WithdrawalRecord,
-    extract_withdrawal_order_id,
-    is_withdrawal_tracking_query,
 )
 from customer_service.conversations.repository import (
     ConversationCursor,
@@ -20,6 +18,11 @@ from customer_service.conversations.repository import (
     ConversationTurn,
 )
 from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage, RagService
+from customer_service.intents.service import (
+    IntentDecision,
+    IntentHistoryMessage,
+    IntentRecognizer,
+)
 
 
 MAX_MESSAGE_LENGTH = 4_000
@@ -29,6 +32,11 @@ MAX_CONVERSATION_LIST_LIMIT = 100
 WITHDRAWAL_ORDER_ID_PROMPT = (
     "请提供提现订单号，例如 WD-10001，我可以帮你查询处理状态。"
 )
+UNKNOWN_INTENT_PROMPT = "请补充说明你遇到的具体问题、操作步骤或页面提示。"
+HUMAN_REQUEST_PROMPT = (
+    "请先描述需要解决的具体问题，我会优先尝试自动查询或提供处理方案。"
+)
+OUT_OF_SCOPE_ANSWER = "我目前只能处理交易所账户、交易和平台使用相关的问题。"
 
 
 class ConversationService:
@@ -38,10 +46,12 @@ class ConversationService:
         repository: ConversationRepository,
         rag_service: RagService | None,
         withdrawal_service: WithdrawalLookup,
+        intent_service: IntentRecognizer,
     ) -> None:
         self._repository = repository
         self._rag_service = rag_service
         self._withdrawal_service = withdrawal_service
+        self._intent_service = intent_service
 
     async def create_conversation(self, user_id: str) -> ConversationRecord:
         return await self._repository.create_conversation(user_id)
@@ -78,31 +88,29 @@ class ConversationService:
         ):
             raise ConversationNotFoundError(str(conversation_id))
 
-        order_id = extract_withdrawal_order_id(normalized_content)
-        if order_id is not None:
-            withdrawal = self._withdrawal_service.get_withdrawal(user_id, order_id)
-            answer = RagAnswer(
-                answer=_withdrawal_answer(order_id, withdrawal),
-                sources=[],
-            )
-        elif is_withdrawal_tracking_query(normalized_content):
-            answer = RagAnswer(answer=WITHDRAWAL_ORDER_ID_PROMPT, sources=[])
-        else:
-            if self._rag_service is None:
-                raise RagUnavailableError
-            recent_messages = await self._repository.get_recent_messages(
-                conversation_id,
-                user_id=user_id,
-                limit=MAX_HISTORY_MESSAGES,
-            )
-            history = [
-                RagHistoryMessage(role=message.role, content=message.content)
-                for message in recent_messages
-            ]
-            answer = await self._rag_service.answer(
-                normalized_content,
-                history=history,
-            )
+        recent_messages = await self._repository.get_recent_messages(
+            conversation_id,
+            user_id=user_id,
+            limit=MAX_HISTORY_MESSAGES,
+        )
+        intent_history = [
+            IntentHistoryMessage(role=message.role, content=message.content)
+            for message in recent_messages
+        ]
+        decision = await self._intent_service.recognize(
+            normalized_content,
+            history=intent_history,
+        )
+        rag_history = [
+            RagHistoryMessage(role=message.role, content=message.content)
+            for message in recent_messages
+        ]
+        answer = await self._answer_for_intent(
+            user_id,
+            normalized_content,
+            decision,
+            rag_history,
+        )
         sources = [
             {
                 "article_id": source.article_id,
@@ -118,6 +126,29 @@ class ConversationService:
             assistant_content=answer.answer,
             assistant_sources=sources,
         )
+
+    async def _answer_for_intent(
+        self,
+        user_id: str,
+        content: str,
+        decision: IntentDecision,
+        history: list[RagHistoryMessage],
+    ) -> RagAnswer:
+        if decision.route == "business_query" and decision.topic == "withdrawal":
+            order_id = decision.entities.get("order_id")
+            if not order_id or "order_id" in decision.missing_fields:
+                return RagAnswer(answer=WITHDRAWAL_ORDER_ID_PROMPT, sources=[])
+            withdrawal = self._withdrawal_service.get_withdrawal(user_id, order_id)
+            return RagAnswer(answer=_withdrawal_answer(order_id, withdrawal), sources=[])
+        if decision.route == "out_of_scope":
+            return RagAnswer(answer=OUT_OF_SCOPE_ANSWER, sources=[])
+        if decision.route == "human_request":
+            return RagAnswer(answer=HUMAN_REQUEST_PROMPT, sources=[])
+        if decision.route == "unknown":
+            return RagAnswer(answer=UNKNOWN_INTENT_PROMPT, sources=[])
+        if self._rag_service is None:
+            raise RagUnavailableError
+        return await self._rag_service.answer(content, history=history)
 
     async def get_history(
         self,

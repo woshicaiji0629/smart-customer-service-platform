@@ -12,6 +12,7 @@ from customer_service.knowledge.embeddings import DEFAULT_BASE_URL
 
 
 DEFAULT_CHAT_MODEL: Final = "qwen-plus"
+DEFAULT_INTENT_MODEL: Final = "qwen-flash"
 
 
 class ChatMessage(TypedDict):
@@ -31,12 +32,14 @@ class DashScopeChatClient:
         base_url: str = DEFAULT_BASE_URL,
         model: str = DEFAULT_CHAT_MODEL,
         timeout: float = 60.0,
+        json_mode: bool = False,
     ) -> None:
         if not api_key:
             raise ValueError("api_key 不能为空")
         if not model:
             raise ValueError("model 不能为空")
         self.model = model
+        self._json_mode = json_mode
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/") + "/",
             timeout=httpx.Timeout(timeout),
@@ -56,10 +59,13 @@ class DashScopeChatClient:
         response: httpx.Response | None = None
         for attempt in range(3):
             try:
-                response = await self._client.post(
-                    "chat/completions",
-                    json={"model": self.model, "messages": list(messages)},
-                )
+                payload: dict[str, object] = {
+                    "model": self.model,
+                    "messages": list(messages),
+                }
+                if self._json_mode:
+                    payload["response_format"] = {"type": "json_object"}
+                response = await self._client.post("chat/completions", json=payload)
                 if response.status_code == 429 or response.status_code >= 500:
                     response.raise_for_status()
                 break

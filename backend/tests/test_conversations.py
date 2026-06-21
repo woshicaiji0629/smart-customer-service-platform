@@ -35,6 +35,11 @@ from customer_service.conversations.service import (
     RagUnavailableError,
 )
 from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage, RagSource
+from customer_service.intents.service import (
+    IntentDecision,
+    IntentHistoryMessage,
+    IntentService,
+)
 from customer_service.main import app
 
 
@@ -185,6 +190,26 @@ class FakeRagService:
         )
 
 
+class FakeIntentRecognizer:
+    def __init__(self) -> None:
+        self.history: list[IntentHistoryMessage] = []
+
+    async def recognize(
+        self,
+        content: str,
+        *,
+        history: list[IntentHistoryMessage],
+    ) -> IntentDecision:
+        self.history = history
+        return IntentDecision(
+            route="knowledge_rag",
+            topic="other",
+            confidence=1.0,
+            entities={},
+            missing_fields=(),
+        )
+
+
 def test_conversation_schema_has_expected_columns() -> None:
     assert set(conversations.c.keys()) == {
         "id",
@@ -209,6 +234,7 @@ def test_conversation_service_saves_complete_turn_after_rag() -> None:
         repository=repository,  # type: ignore[arg-type]
         rag_service=rag_service,  # type: ignore[arg-type]
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=FakeIntentRecognizer(),
     )
 
     turn = asyncio.run(
@@ -241,6 +267,7 @@ def test_conversation_service_lists_current_users_conversations() -> None:
         repository=repository,  # type: ignore[arg-type]
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=FakeIntentRecognizer(),
     )
 
     cursor = ConversationCursor(
@@ -394,6 +421,7 @@ def test_conversation_service_rejects_missing_conversation_before_rag() -> None:
         repository=repository,  # type: ignore[arg-type]
         rag_service=rag_service,  # type: ignore[arg-type]
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=FakeIntentRecognizer(),
     )
 
     try:
@@ -414,6 +442,7 @@ def test_conversation_service_rejects_another_users_conversation() -> None:
         repository=repository,  # type: ignore[arg-type]
         rag_service=rag_service,  # type: ignore[arg-type]
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=FakeIntentRecognizer(),
     )
 
     try:
@@ -443,6 +472,7 @@ def test_conversation_service_passes_recent_messages_to_rag() -> None:
         repository=repository,  # type: ignore[arg-type]
         rag_service=rag_service,  # type: ignore[arg-type]
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=FakeIntentRecognizer(),
     )
 
     asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "那我要联系谁？"))
@@ -460,11 +490,12 @@ def test_conversation_service_routes_order_id_to_business_query() -> None:
         repository=repository,  # type: ignore[arg-type]
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
     )
 
     asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "查询 wd-10001"))
 
-    assert repository.recent_limit is None
+    assert repository.recent_limit == 6
     assert repository.saved is not None
     assert repository.saved["assistant_content"] == (
         "Mock 查询结果：提现订单 WD-10001，状态 success，数量 120.00 USDT，"
@@ -479,6 +510,7 @@ def test_conversation_service_requests_order_id_for_tracking_query() -> None:
         repository=repository,  # type: ignore[arg-type]
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
     )
 
     asyncio.run(
@@ -489,12 +521,44 @@ def test_conversation_service_requests_order_id_for_tracking_query() -> None:
         )
     )
 
-    assert repository.recent_limit is None
+    assert repository.recent_limit == 6
     assert repository.saved is not None
     assert repository.saved["assistant_content"] == (
         "请提供提现订单号，例如 WD-10001，我可以帮你查询处理状态。"
     )
     assert repository.saved["assistant_sources"] == []
+
+
+def test_conversation_service_uses_intent_rules_in_production_path() -> None:
+    repository = FakeConversationRepository()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "查询 WD-10001"))
+
+    assert repository.saved is not None
+    assert "状态 success" in str(repository.saved["assistant_content"])
+
+
+def test_conversation_service_clarifies_unknown_intent_without_model() -> None:
+    repository = FakeConversationRepository()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "这个怎么弄"))
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "请补充说明你遇到的具体问题、操作步骤或页面提示。"
+    )
 
 
 def test_conversation_service_rejects_rag_question_when_unconfigured() -> None:
@@ -503,6 +567,7 @@ def test_conversation_service_rejects_rag_question_when_unconfigured() -> None:
         repository=repository,  # type: ignore[arg-type]
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=FakeIntentRecognizer(),
     )
 
     try:
@@ -514,7 +579,7 @@ def test_conversation_service_rejects_rag_question_when_unconfigured() -> None:
     else:
         raise AssertionError("expected RagUnavailableError")
 
-    assert repository.recent_limit is None
+    assert repository.recent_limit == 6
     assert repository.saved is None
 
 
@@ -525,6 +590,7 @@ def test_conversation_service_does_not_expose_another_users_order() -> None:
         repository=repository,  # type: ignore[arg-type]
         rag_service=rag_service,  # type: ignore[arg-type]
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
     )
 
     asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "查询 WD-10002"))
