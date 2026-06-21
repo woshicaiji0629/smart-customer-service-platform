@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import UTC, datetime
 from uuid import UUID
 
 from customer_service.business.service import (
@@ -31,6 +33,7 @@ from customer_service.intents.service import (
 
 MAX_MESSAGE_LENGTH = 4_000
 MAX_HISTORY_MESSAGES = 6
+INACTIVE_CONVERSATION_CLOSE_AFTER_SECONDS = 300
 DEFAULT_CONVERSATION_LIST_LIMIT = 50
 MAX_CONVERSATION_LIST_LIMIT = 100
 WITHDRAWAL_ORDER_ID_PROMPT = (
@@ -42,6 +45,10 @@ HUMAN_REQUEST_PROMPT = (
     "请先描述需要解决的具体问题，我会优先尝试自动查询或提供处理方案。"
 )
 OUT_OF_SCOPE_ANSWER = "我目前只能处理交易所账户、交易和平台使用相关的问题。"
+INACTIVE_CONVERSATION_NOTICE = (
+    "由于你超过 5 分钟未回复，之前的问题已自动关闭。"
+    "我们将按新的问题重新处理。"
+)
 
 
 class ConversationService:
@@ -53,12 +60,14 @@ class ConversationService:
         withdrawal_service: WithdrawalLookup,
         intent_service: IntentRecognizer,
         deposit_service: DepositLookup | None = None,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         self._repository = repository
         self._rag_service = rag_service
         self._deposit_service = deposit_service or MOCK_DEPOSIT_SERVICE
         self._withdrawal_service = withdrawal_service
         self._intent_service = intent_service
+        self._now = now or (lambda: datetime.now(UTC))
 
     async def create_conversation(self, user_id: str) -> ConversationRecord:
         return await self._repository.create_conversation(user_id)
@@ -100,18 +109,20 @@ class ConversationService:
             user_id=user_id,
             limit=MAX_HISTORY_MESSAGES,
         )
+        is_inactive = _is_inactive_context(recent_messages, now=self._now())
+        active_messages = [] if is_inactive else recent_messages
         intent_history = [
             IntentHistoryMessage(role=message.role, content=message.content)
-            for message in recent_messages
+            for message in active_messages
         ]
         decision = await self._intent_service.recognize(
             normalized_content,
             history=intent_history,
         )
-        decision = _apply_pending_intent(decision, recent_messages)
+        decision = _apply_pending_intent(decision, active_messages)
         rag_history = [
             RagHistoryMessage(role=message.role, content=message.content)
-            for message in recent_messages
+            for message in active_messages
         ]
         answer = await self._answer_for_intent(
             user_id,
@@ -119,6 +130,11 @@ class ConversationService:
             decision,
             rag_history,
         )
+        if is_inactive:
+            answer = RagAnswer(
+                answer=f"{INACTIVE_CONVERSATION_NOTICE}\n\n{answer.answer}",
+                sources=answer.sources,
+            )
         sources = [
             {
                 "article_id": source.article_id,
@@ -174,6 +190,19 @@ class ConversationService:
 
 class RagUnavailableError(RuntimeError):
     """Raised when a conversation requires RAG but no model key is configured."""
+
+
+def _is_inactive_context(
+    history: list[MessageRecord],
+    *,
+    now: datetime,
+) -> bool:
+    if not history:
+        return False
+    latest_message = history[-1]
+    return (
+        now - latest_message.created_at
+    ).total_seconds() > INACTIVE_CONVERSATION_CLOSE_AFTER_SECONDS
 
 
 def _apply_pending_intent(

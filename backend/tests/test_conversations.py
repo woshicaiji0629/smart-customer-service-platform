@@ -88,6 +88,23 @@ def _turn() -> ConversationTurn:
     )
 
 
+def _message(
+    *,
+    message_id: int,
+    role: str,
+    content: str,
+    created_at: datetime = UPDATED_AT,
+) -> MessageRecord:
+    return MessageRecord(
+        message_id=message_id,
+        conversation_id=CONVERSATION_ID,
+        role=role,
+        content=content,
+        sources=[],
+        created_at=created_at,
+    )
+
+
 class FakeConversationRepository:
     def __init__(
         self,
@@ -235,6 +252,7 @@ def test_conversation_service_saves_complete_turn_after_rag() -> None:
         rag_service=rag_service,  # type: ignore[arg-type]
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
     turn = asyncio.run(
@@ -473,6 +491,7 @@ def test_conversation_service_passes_recent_messages_to_rag() -> None:
         rag_service=rag_service,  # type: ignore[arg-type]
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
     asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "那我要联系谁？"))
@@ -484,6 +503,41 @@ def test_conversation_service_passes_recent_messages_to_rag() -> None:
     ]
 
 
+def test_conversation_service_closes_inactive_context_before_rag() -> None:
+    repository = FakeConversationRepository(
+        recent_messages=[
+            _message(
+                message_id=1,
+                role="user",
+                content="提现没有到账",
+                created_at=CREATED_AT,
+            ),
+            _message(
+                message_id=2,
+                role="assistant",
+                content="请查询 TxID。[资料 1]",
+                created_at=UPDATED_AT,
+            ),
+        ]
+    )
+    rag_service = FakeRagService()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=rag_service,  # type: ignore[arg-type]
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=FakeIntentRecognizer(),
+        now=lambda: datetime(2026, 6, 19, 8, 7, tzinfo=UTC),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "那我要联系谁？"))
+
+    assert rag_service.history == []
+    assert repository.saved is not None
+    assert str(repository.saved["assistant_content"]).startswith(
+        "由于你超过 5 分钟未回复，之前的问题已自动关闭。"
+    )
+
+
 def test_conversation_service_routes_order_id_to_business_query() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
@@ -491,6 +545,7 @@ def test_conversation_service_routes_order_id_to_business_query() -> None:
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
     asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "查询 wd-10001"))
@@ -511,6 +566,7 @@ def test_conversation_service_requests_order_id_for_tracking_query() -> None:
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
     asyncio.run(
@@ -603,6 +659,7 @@ def test_conversation_service_keeps_pending_deposit_context() -> None:
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
     asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "还没找到"))
@@ -610,6 +667,35 @@ def test_conversation_service_keeps_pending_deposit_context() -> None:
     assert repository.saved is not None
     assert repository.saved["assistant_content"] == (
         "请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。"
+    )
+
+
+def test_conversation_service_drops_pending_context_after_inactivity() -> None:
+    repository = FakeConversationRepository(
+        recent_messages=[
+            _message(
+                message_id=1,
+                role="assistant",
+                content="请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。",
+                created_at=UPDATED_AT,
+            )
+        ]
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 7, tzinfo=UTC),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "还没找到"))
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "由于你超过 5 分钟未回复，之前的问题已自动关闭。"
+        "我们将按新的问题重新处理。\n\n"
+        "请补充说明你遇到的具体问题、操作步骤或页面提示。"
     )
 
 
@@ -631,6 +717,7 @@ def test_conversation_service_keeps_pending_withdrawal_context() -> None:
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
     asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "还没找到"))
