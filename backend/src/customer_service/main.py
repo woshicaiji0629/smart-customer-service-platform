@@ -40,6 +40,7 @@ from customer_service.knowledge.rag import RagCitationError, RagService
 from customer_service.knowledge.repository import MAX_SEARCH_LIMIT, KnowledgeRepository
 from customer_service.knowledge.service import KnowledgeSearchService
 from customer_service.intents.service import IntentService
+from customer_service.model_usage.api import router as model_usage_router
 from customer_service.model_usage.repository import (
     DatabaseModelUsageSink,
     ModelUsageRepository,
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.knowledge_search_service = None
     app.state.rag_service = None
     app.state.conversation_service = None
+    app.state.model_usage_repository = None
     app.state.session_store = None
     app.state.session_ttl_seconds = int(
         os.getenv("SESSION_TTL_SECONDS", str(DEFAULT_SESSION_TTL_SECONDS))
@@ -86,6 +88,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             stack.push_async_callback(conversation_repository.close)
             model_usage_repository = ModelUsageRepository(database_url)
             stack.push_async_callback(model_usage_repository.close)
+            app.state.model_usage_repository = model_usage_repository
             model_usage_sink = DatabaseModelUsageSink(model_usage_repository)
 
             rag_service: RagService | None = None
@@ -146,6 +149,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.knowledge_search_service = None
         app.state.rag_service = None
         app.state.conversation_service = None
+        app.state.model_usage_repository = None
         app.state.session_store = None
 
 
@@ -160,6 +164,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(business_router)
 app.include_router(conversation_router)
+app.include_router(model_usage_router)
 
 
 def _env_flag(name: str, *, default: bool = False) -> bool:
