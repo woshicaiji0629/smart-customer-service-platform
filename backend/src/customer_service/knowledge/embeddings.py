@@ -19,6 +19,7 @@ DEFAULT_BASE_URL: Final = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 DEFAULT_MODEL: Final = "text-embedding-v4"
 DEFAULT_DIMENSIONS: Final = 1_024
 MAX_BATCH_SIZE: Final = 10
+DASHSCOPE_PROVIDER: Final = "dashscope"
 
 
 class EmbeddingError(RuntimeError):
@@ -108,7 +109,12 @@ class DashScopeEmbeddingClient:
             for vector in vectors
         ):
             raise EmbeddingError(f"Embedding 维度不是预期的 {self.dimensions}")
-        self._usage_sink.record(
-            build_usage_record(model=self.model, purpose="embedding", payload=payload)
+        await self._usage_sink.record(
+            build_usage_record(
+                provider=DASHSCOPE_PROVIDER,
+                model=self.model,
+                purpose="embedding",
+                payload=payload,
+            )
         )
         return vectors

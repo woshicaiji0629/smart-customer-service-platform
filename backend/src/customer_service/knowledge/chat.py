@@ -18,6 +18,7 @@ from customer_service.knowledge.usage import (
 
 DEFAULT_CHAT_MODEL: Final = "qwen-plus"
 DEFAULT_INTENT_MODEL: Final = "qwen-flash"
+DASHSCOPE_PROVIDER: Final = "dashscope"
 
 
 class ChatMessage(TypedDict):
@@ -100,7 +101,12 @@ class DashScopeChatClient:
             raise ChatCompletionError("大模型响应格式错误") from exc
         if not isinstance(content, str) or not content.strip():
             raise ChatCompletionError("大模型响应内容为空")
-        self._usage_sink.record(
-            build_usage_record(model=self.model, purpose=purpose, payload=payload)
+        await self._usage_sink.record(
+            build_usage_record(
+                provider=DASHSCOPE_PROVIDER,
+                model=self.model,
+                purpose=purpose,
+                payload=payload,
+            )
         )
         return content.strip()

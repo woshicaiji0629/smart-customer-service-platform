@@ -40,6 +40,10 @@ from customer_service.knowledge.rag import RagCitationError, RagService
 from customer_service.knowledge.repository import MAX_SEARCH_LIMIT, KnowledgeRepository
 from customer_service.knowledge.service import KnowledgeSearchService
 from customer_service.intents.service import IntentService
+from customer_service.model_usage.repository import (
+    DatabaseModelUsageSink,
+    ModelUsageRepository,
+)
 
 
 LOCAL_FRONTEND_ORIGINS = [
@@ -80,6 +84,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
             conversation_repository = ConversationRepository(database_url)
             stack.push_async_callback(conversation_repository.close)
+            model_usage_repository = ModelUsageRepository(database_url)
+            stack.push_async_callback(model_usage_repository.close)
+            model_usage_sink = DatabaseModelUsageSink(model_usage_repository)
 
             rag_service: RagService | None = None
             intent_classifier = None
@@ -94,6 +101,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                         base_url=base_url,
                         model=DEFAULT_MODEL,
                         dimensions=DEFAULT_DIMENSIONS,
+                        usage_sink=model_usage_sink,
                     )
                 )
                 chat_client = await stack.enter_async_context(
@@ -101,6 +109,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                         api_key=api_key,
                         base_url=base_url,
                         model=os.getenv("DASHSCOPE_CHAT_MODEL", DEFAULT_CHAT_MODEL),
+                        usage_sink=model_usage_sink,
                     )
                 )
                 intent_classifier = await stack.enter_async_context(
@@ -112,6 +121,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                             DEFAULT_INTENT_MODEL,
                         ),
                         json_mode=True,
+                        usage_sink=model_usage_sink,
                     )
                 )
                 app.state.knowledge_search_service = KnowledgeSearchService(

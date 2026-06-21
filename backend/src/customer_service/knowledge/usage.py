@@ -10,13 +10,14 @@ from typing import Any, Final, Protocol
 logger = logging.getLogger(__name__)
 
 MODEL_TOKEN_PRICES_CNY_PER_1M: Final = {
-    "qwen-flash": {"input": 0.15, "output": 1.50},
-    "qwen-plus": {"input": 0.80, "output": 2.00},
+    ("dashscope", "qwen-flash"): {"input": 0.15, "output": 1.50},
+    ("dashscope", "qwen-plus"): {"input": 0.80, "output": 2.00},
 }
 
 
 @dataclass(frozen=True, slots=True)
 class ModelUsageRecord:
+    provider: str
     model: str
     purpose: str
     prompt_tokens: int | None
@@ -26,16 +27,17 @@ class ModelUsageRecord:
 
 
 class ModelUsageSink(Protocol):
-    def record(self, usage: ModelUsageRecord) -> None: ...
+    async def record(self, usage: ModelUsageRecord) -> None: ...
 
 
 class LoggingModelUsageSink:
-    def record(self, usage: ModelUsageRecord) -> None:
+    async def record(self, usage: ModelUsageRecord) -> None:
         logger.info("model_usage", extra={"model_usage": asdict(usage)})
 
 
 def build_usage_record(
     *,
+    provider: str,
     model: str,
     purpose: str,
     payload: dict[str, Any],
@@ -43,6 +45,7 @@ def build_usage_record(
     usage = payload.get("usage")
     if not isinstance(usage, dict):
         return ModelUsageRecord(
+            provider=provider,
             model=model,
             purpose=purpose,
             prompt_tokens=None,
@@ -52,12 +55,18 @@ def build_usage_record(
         )
 
     prompt_tokens = _int_or_none(
-        usage.get("prompt_tokens", usage.get("input_tokens"))
+        usage.get(
+            "prompt_tokens",
+            usage.get("input_tokens", usage.get("promptTokenCount")),
+        )
     )
     completion_tokens = _int_or_none(
-        usage.get("completion_tokens", usage.get("output_tokens"))
+        usage.get(
+            "completion_tokens",
+            usage.get("output_tokens", usage.get("candidatesTokenCount")),
+        )
     )
-    total_tokens = _int_or_none(usage.get("total_tokens"))
+    total_tokens = _int_or_none(usage.get("total_tokens", usage.get("totalTokenCount")))
     if (
         total_tokens is None
         and prompt_tokens is not None
@@ -66,12 +75,14 @@ def build_usage_record(
         total_tokens = prompt_tokens + completion_tokens
 
     return ModelUsageRecord(
+        provider=provider,
         model=model,
         purpose=purpose,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         estimated_cost_cny=_estimate_cost_cny(
+            provider=provider,
             model=model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -81,11 +92,12 @@ def build_usage_record(
 
 def _estimate_cost_cny(
     *,
+    provider: str,
     model: str,
     prompt_tokens: int | None,
     completion_tokens: int | None,
 ) -> float | None:
-    price = MODEL_TOKEN_PRICES_CNY_PER_1M.get(model)
+    price = MODEL_TOKEN_PRICES_CNY_PER_1M.get((provider, model))
     if price is None or prompt_tokens is None or completion_tokens is None:
         return None
     return round(

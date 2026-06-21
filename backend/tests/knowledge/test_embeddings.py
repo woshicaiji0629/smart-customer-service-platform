@@ -12,7 +12,7 @@ class RecordingUsageSink:
     def __init__(self) -> None:
         self.records: list[ModelUsageRecord] = []
 
-    def record(self, usage: ModelUsageRecord) -> None:
+    async def record(self, usage: ModelUsageRecord) -> None:
         self.records.append(usage)
 
 
@@ -56,6 +56,7 @@ def test_embed_batches_and_orders_vectors() -> None:
     assert vectors[0] == [0.0, 1.0]
     assert sink.records == [
         ModelUsageRecord(
+            provider="dashscope",
             model="text-embedding-v4",
             purpose="embedding",
             prompt_tokens=10,
@@ -64,6 +65,7 @@ def test_embed_batches_and_orders_vectors() -> None:
             estimated_cost_cny=None,
         ),
         ModelUsageRecord(
+            provider="dashscope",
             model="text-embedding-v4",
             purpose="embedding",
             prompt_tokens=1,

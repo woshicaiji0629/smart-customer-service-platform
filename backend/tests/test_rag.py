@@ -97,7 +97,7 @@ class RecordingUsageSink:
     def __init__(self) -> None:
         self.records: list[ModelUsageRecord] = []
 
-    def record(self, usage: ModelUsageRecord) -> None:
+    async def record(self, usage: ModelUsageRecord) -> None:
         self.records.append(usage)
 
 
@@ -139,6 +139,7 @@ def test_chat_client_calls_compatible_api() -> None:
     }
     assert sink.records == [
         ModelUsageRecord(
+            provider="dashscope",
             model="qwen-plus",
             purpose="chat",
             prompt_tokens=100,
