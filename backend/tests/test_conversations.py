@@ -585,6 +585,88 @@ def test_conversation_service_does_not_expose_another_users_deposit() -> None:
     assert repository.saved["assistant_sources"] == []
 
 
+def test_conversation_service_keeps_pending_deposit_context() -> None:
+    repository = FakeConversationRepository(
+        recent_messages=[
+            MessageRecord(
+                message_id=1,
+                conversation_id=CONVERSATION_ID,
+                role="assistant",
+                content="请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。",
+                sources=[],
+                created_at=CREATED_AT,
+            )
+        ]
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "还没找到"))
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。"
+    )
+
+
+def test_conversation_service_keeps_pending_withdrawal_context() -> None:
+    repository = FakeConversationRepository(
+        recent_messages=[
+            MessageRecord(
+                message_id=1,
+                conversation_id=CONVERSATION_ID,
+                role="assistant",
+                content="请提供提现订单号，例如 WD-10001，我可以帮你查询处理状态。",
+                sources=[],
+                created_at=CREATED_AT,
+            )
+        ]
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "还没找到"))
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "请提供提现订单号，例如 WD-10001，我可以帮你查询处理状态。"
+    )
+
+
+def test_conversation_service_does_not_override_explicit_intent_with_pending_context() -> None:
+    repository = FakeConversationRepository(
+        recent_messages=[
+            MessageRecord(
+                message_id=1,
+                conversation_id=CONVERSATION_ID,
+                role="assistant",
+                content="请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。",
+                sources=[],
+                created_at=CREATED_AT,
+            )
+        ]
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "查询 WD-10001"))
+
+    assert repository.saved is not None
+    assert "提现订单 WD-10001" in str(repository.saved["assistant_content"])
+
+
 def test_conversation_service_uses_intent_rules_in_production_path() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(

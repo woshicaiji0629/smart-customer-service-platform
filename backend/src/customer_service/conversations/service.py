@@ -108,6 +108,7 @@ class ConversationService:
             normalized_content,
             history=intent_history,
         )
+        decision = _apply_pending_intent(decision, recent_messages)
         rag_history = [
             RagHistoryMessage(role=message.role, content=message.content)
             for message in recent_messages
@@ -173,6 +174,46 @@ class ConversationService:
 
 class RagUnavailableError(RuntimeError):
     """Raised when a conversation requires RAG but no model key is configured."""
+
+
+def _apply_pending_intent(
+    decision: IntentDecision,
+    history: list[MessageRecord],
+) -> IntentDecision:
+    if decision.route != "unknown":
+        return decision
+    pending_topic = _pending_topic_from_history(history)
+    if pending_topic == "deposit":
+        return IntentDecision(
+            route="business_query",
+            topic="deposit",
+            confidence=1.0,
+            entities={},
+            missing_fields=("txid",),
+        )
+    if pending_topic == "withdrawal":
+        return IntentDecision(
+            route="business_query",
+            topic="withdrawal",
+            confidence=1.0,
+            entities={},
+            missing_fields=("order_id",),
+        )
+    return decision
+
+
+def _pending_topic_from_history(history: list[MessageRecord]) -> str | None:
+    for message in reversed(history):
+        role = getattr(message, "role", None)
+        content = getattr(message, "content", "")
+        if role != "assistant" or not isinstance(content, str):
+            continue
+        if DEPOSIT_TXID_PROMPT in content:
+            return "deposit"
+        if WITHDRAWAL_ORDER_ID_PROMPT in content:
+            return "withdrawal"
+        return None
+    return None
 
 
 def _withdrawal_answer(
