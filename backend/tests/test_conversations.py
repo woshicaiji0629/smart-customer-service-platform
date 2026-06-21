@@ -231,6 +231,7 @@ class FakeIntentRecognizer:
         return IntentDecision(
             route="knowledge_rag",
             topic="other",
+            intent_code="unknown",
             confidence=1.0,
             entities={},
             missing_fields=(),
@@ -260,6 +261,7 @@ def test_conversation_schema_has_expected_columns() -> None:
         "assistant_message_id",
         "route",
         "topic",
+        "intent_code",
         "confidence",
         "entities",
         "missing_fields",
@@ -309,6 +311,7 @@ def test_conversation_service_saves_complete_turn_after_rag() -> None:
             "assistant_message_id": 2,
             "route": "knowledge_rag",
             "topic": "other",
+            "intent_code": "unknown",
             "confidence": 1.0,
             "entities": {},
             "missing_fields": (),

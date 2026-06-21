@@ -254,6 +254,7 @@ class ConversationService:
                 assistant_message_id=turn.assistant_message.message_id,
                 route=decision.route,
                 topic=decision.topic,
+                intent_code=decision.intent_code,
                 confidence=decision.confidence,
                 entities=decision.entities,
                 missing_fields=decision.missing_fields,
@@ -299,6 +300,7 @@ def _apply_pending_intent(
         return IntentDecision(
             route="business_query",
             topic="deposit",
+            intent_code="deposit_status_query",
             confidence=1.0,
             entities={},
             missing_fields=("txid",),
@@ -307,6 +309,7 @@ def _apply_pending_intent(
         return IntentDecision(
             route="business_query",
             topic="withdrawal",
+            intent_code="withdrawal_status_query",
             confidence=1.0,
             entities={},
             missing_fields=("order_id",),

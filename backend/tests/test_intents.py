@@ -33,6 +33,7 @@ def test_rules_extract_withdrawal_order_without_model_call() -> None:
 
     assert decision.route == "business_query"
     assert decision.topic == "withdrawal"
+    assert decision.intent_code == "withdrawal_status_query"
     assert decision.entities == {"order_id": "WD-10001"}
     assert decision.missing_fields == ()
     assert classifier.messages == []
@@ -46,6 +47,7 @@ def test_rules_extract_deposit_txid_without_model_call() -> None:
 
     assert decision.route == "business_query"
     assert decision.topic == "deposit"
+    assert decision.intent_code == "deposit_status_query"
     assert decision.entities == {"txid": "TX-10001"}
     assert decision.missing_fields == ()
     assert classifier.messages == []
@@ -57,12 +59,14 @@ def test_rules_request_missing_withdrawal_order() -> None:
     )
 
     assert decision.route == "business_query"
+    assert decision.intent_code == "withdrawal_missing_arrival"
     assert decision.missing_fields == ("order_id",)
 
 
 def test_model_classifies_topic_and_extracts_entities_with_history() -> None:
     classifier = FakeClassifier(
         '{"route":"knowledge_rag","topic":"identity_verification",'
+        '"intent_code":"identity_verification_failure",'
         '"confidence":0.92,"entities":{"verification_type":"个人认证",'
         '"failure_reason":"证件模糊"},"missing_fields":[]}'
     )
@@ -81,6 +85,7 @@ def test_model_classifies_topic_and_extracts_entities_with_history() -> None:
     )
 
     assert decision.topic == "identity_verification"
+    assert decision.intent_code == "identity_verification_failure"
     assert decision.entities == {
         "verification_type": "个人认证",
         "failure_reason": "证件模糊",
@@ -91,7 +96,8 @@ def test_model_classifies_topic_and_extracts_entities_with_history() -> None:
 
 def test_low_confidence_result_falls_back_to_unknown() -> None:
     classifier = FakeClassifier(
-        '{"route":"knowledge_rag","topic":"deposit","confidence":0.2,'
+        '{"route":"knowledge_rag","topic":"deposit",'
+        '"intent_code":"deposit_missing_arrival","confidence":0.2,'
         '"entities":{},"missing_fields":[]}'
     )
 
@@ -103,7 +109,8 @@ def test_low_confidence_result_falls_back_to_unknown() -> None:
 
 def test_invalid_or_unexpected_fields_fall_back_to_unknown() -> None:
     classifier = FakeClassifier(
-        '{"route":"knowledge_rag","topic":"deposit","confidence":0.9,'
+        '{"route":"knowledge_rag","topic":"deposit",'
+        '"intent_code":"deposit_missing_arrival","confidence":0.9,'
         '"entities":{"password":"secret"},"missing_fields":[]}'
     )
 
@@ -116,6 +123,7 @@ def test_invalid_or_unexpected_fields_fall_back_to_unknown() -> None:
 def test_non_withdrawal_business_route_is_forced_to_rag() -> None:
     classifier = FakeClassifier(
         '{"route":"business_query","topic":"account_security",'
+        '"intent_code":"account_security_compromised",'
         '"confidence":0.9,"entities":{},"missing_fields":[]}'
     )
 
@@ -123,11 +131,13 @@ def test_non_withdrawal_business_route_is_forced_to_rag() -> None:
 
     assert decision.route == "knowledge_rag"
     assert decision.topic == "account_security"
+    assert decision.intent_code == "account_security_compromised"
 
 
 def test_concrete_issue_is_preferred_over_human_request() -> None:
     classifier = FakeClassifier(
         '{"route":"human_request","topic":"identity_verification",'
+        '"intent_code":"identity_verification_failure",'
         '"confidence":0.9,"entities":{},"missing_fields":[]}'
     )
 
@@ -141,6 +151,7 @@ def test_concrete_issue_is_preferred_over_human_request() -> None:
 def test_human_only_request_is_normalized_to_other_topic() -> None:
     classifier = FakeClassifier(
         '{"route":"human_request","topic":"general_platform",'
+        '"intent_code":"general_platform_operation",'
         '"confidence":0.9,"entities":{},"missing_fields":[]}'
     )
 
@@ -148,6 +159,7 @@ def test_human_only_request_is_normalized_to_other_topic() -> None:
 
     assert decision.route == "human_request"
     assert decision.topic == "other"
+    assert decision.intent_code == "human_only"
     assert classifier.messages == []
 
 
@@ -155,11 +167,13 @@ def test_unconfigured_model_returns_unknown_for_non_rule_query() -> None:
     decision = asyncio.run(IntentService(None).recognize("实名认证失败"))
 
     assert decision.route == "unknown"
+    assert decision.intent_code == "unknown"
 
 
 def test_generic_withdrawal_failure_uses_model_instead_of_business_rule() -> None:
     classifier = FakeClassifier(
-        '{"route":"knowledge_rag","topic":"withdrawal","confidence":0.9,'
+        '{"route":"knowledge_rag","topic":"withdrawal",'
+        '"intent_code":"withdrawal_failure_reason","confidence":0.9,'
         '"entities":{},"missing_fields":[]}'
     )
 
@@ -174,7 +188,8 @@ def test_generic_withdrawal_failure_uses_model_instead_of_business_rule() -> Non
 
 def test_human_request_with_withdrawal_issue_uses_model() -> None:
     classifier = FakeClassifier(
-        '{"route":"knowledge_rag","topic":"withdrawal","confidence":0.9,'
+        '{"route":"knowledge_rag","topic":"withdrawal",'
+        '"intent_code":"withdrawal_failure_reason","confidence":0.9,'
         '"entities":{},"missing_fields":[]}'
     )
 
@@ -204,7 +219,8 @@ def test_topic_rules_cover_common_high_confidence_queries() -> None:
 
 def test_model_withdrawal_business_guess_for_generic_question_is_forced_to_rag() -> None:
     classifier = FakeClassifier(
-        '{"route":"business_query","topic":"withdrawal","confidence":0.9,'
+        '{"route":"business_query","topic":"withdrawal",'
+        '"intent_code":"withdrawal_failure_reason","confidence":0.9,'
         '"entities":{},"missing_fields":["order_id"]}'
     )
 
@@ -216,7 +232,7 @@ def test_model_withdrawal_business_guess_for_generic_question_is_forced_to_rag()
 
 def test_ambiguous_failure_without_history_remains_unknown() -> None:
     classifier = FakeClassifier(
-        '{"route":"unknown","topic":"other","confidence":0.9,'
+        '{"route":"unknown","topic":"other","intent_code":"unknown","confidence":0.9,'
         '"entities":{},"missing_fields":[]}'
     )
 
@@ -227,7 +243,7 @@ def test_ambiguous_failure_without_history_remains_unknown() -> None:
 
 def test_generic_page_error_remains_unknown() -> None:
     classifier = FakeClassifier(
-        '{"route":"unknown","topic":"other","confidence":0.9,'
+        '{"route":"unknown","topic":"other","intent_code":"unknown","confidence":0.9,'
         '"entities":{},"missing_fields":[]}'
     )
 
