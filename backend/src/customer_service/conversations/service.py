@@ -5,8 +5,12 @@ from __future__ import annotations
 from uuid import UUID
 
 from customer_service.business.service import (
+    DepositLookup,
+    DepositRecord,
+    MOCK_DEPOSIT_SERVICE,
     WithdrawalLookup,
     WithdrawalRecord,
+    extract_deposit_txid,
 )
 from customer_service.conversations.repository import (
     ConversationCursor,
@@ -32,6 +36,7 @@ MAX_CONVERSATION_LIST_LIMIT = 100
 WITHDRAWAL_ORDER_ID_PROMPT = (
     "请提供提现订单号，例如 WD-10001，我可以帮你查询处理状态。"
 )
+DEPOSIT_TXID_PROMPT = "请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。"
 UNKNOWN_INTENT_PROMPT = "请补充说明你遇到的具体问题、操作步骤或页面提示。"
 HUMAN_REQUEST_PROMPT = (
     "请先描述需要解决的具体问题，我会优先尝试自动查询或提供处理方案。"
@@ -47,9 +52,11 @@ class ConversationService:
         rag_service: RagService | None,
         withdrawal_service: WithdrawalLookup,
         intent_service: IntentRecognizer,
+        deposit_service: DepositLookup | None = None,
     ) -> None:
         self._repository = repository
         self._rag_service = rag_service
+        self._deposit_service = deposit_service or MOCK_DEPOSIT_SERVICE
         self._withdrawal_service = withdrawal_service
         self._intent_service = intent_service
 
@@ -140,6 +147,12 @@ class ConversationService:
                 return RagAnswer(answer=WITHDRAWAL_ORDER_ID_PROMPT, sources=[])
             withdrawal = self._withdrawal_service.get_withdrawal(user_id, order_id)
             return RagAnswer(answer=_withdrawal_answer(order_id, withdrawal), sources=[])
+        if decision.topic == "deposit":
+            txid = decision.entities.get("txid") or extract_deposit_txid(content)
+            if not txid:
+                return RagAnswer(answer=DEPOSIT_TXID_PROMPT, sources=[])
+            deposit = self._deposit_service.get_deposit(user_id, txid)
+            return RagAnswer(answer=_deposit_answer(txid, deposit), sources=[])
         if decision.route == "out_of_scope":
             return RagAnswer(answer=OUT_OF_SCOPE_ANSWER, sources=[])
         if decision.route == "human_request":
@@ -172,4 +185,20 @@ def _withdrawal_answer(
         f"Mock 查询结果：提现订单 {withdrawal.order_id}，"
         f"状态 {withdrawal.status}，数量 {withdrawal.size} {withdrawal.coin}，"
         f"网络 {withdrawal.chain}，更新时间 {withdrawal.updated_at}。"
+    )
+
+
+def _deposit_answer(
+    txid: str,
+    deposit: DepositRecord | None,
+) -> str:
+    if deposit is None:
+        return (
+            f"未找到当前用户的充值记录 {txid}。"
+            "请确认 TxID、充值网络和到账账户是否正确。"
+        )
+    return (
+        f"Mock 查询结果：充值 TxID {deposit.txid}，"
+        f"状态 {deposit.status}，数量 {deposit.size} {deposit.coin}，"
+        f"网络 {deposit.chain}，更新时间 {deposit.updated_at}。"
     )

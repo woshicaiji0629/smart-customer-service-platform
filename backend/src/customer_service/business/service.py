@@ -8,6 +8,7 @@ from typing import Final, Literal, Protocol
 
 
 WITHDRAWAL_ORDER_ID_RE: Final = re.compile(r"\bWD-\d+\b", re.IGNORECASE)
+DEPOSIT_TXID_RE: Final = re.compile(r"\bTX-\d+\b", re.IGNORECASE)
 WITHDRAWAL_TRACKING_TERMS: Final = (
     "到账",
     "状态",
@@ -49,12 +50,30 @@ class WithdrawalRecord:
     updated_at: str
 
 
+@dataclass(frozen=True, slots=True)
+class DepositRecord:
+    txid: str
+    coin: str
+    size: str
+    status: Literal["confirming", "success"]
+    chain: str
+    updated_at: str
+
+
 class WithdrawalLookup(Protocol):
     def get_withdrawal(
         self,
         user_id: str,
         order_id: str,
     ) -> WithdrawalRecord | None: ...
+
+
+class DepositLookup(Protocol):
+    def get_deposit(
+        self,
+        user_id: str,
+        txid: str,
+    ) -> DepositRecord | None: ...
 
 
 class MockWithdrawalService:
@@ -103,4 +122,42 @@ def is_withdrawal_tracking_query(content: str) -> bool:
     )
 
 
+class MockDepositService:
+    _records: Final[dict[str, dict[str, DepositRecord]]] = {
+        "10001": {
+            "TX-10001": DepositRecord(
+                txid="TX-10001",
+                coin="USDT",
+                size="88.00",
+                status="success",
+                chain="TRC20",
+                updated_at="2026-06-20T12:30:00+08:00",
+            )
+        },
+        "10002": {
+            "TX-10002": DepositRecord(
+                txid="TX-10002",
+                coin="ETH",
+                size="1.2500",
+                status="confirming",
+                chain="Ethereum",
+                updated_at="2026-06-20T12:45:00+08:00",
+            )
+        },
+    }
+
+    def get_deposit(
+        self,
+        user_id: str,
+        txid: str,
+    ) -> DepositRecord | None:
+        return self._records.get(user_id, {}).get(txid.upper())
+
+
+def extract_deposit_txid(content: str) -> str | None:
+    match = DEPOSIT_TXID_RE.search(content)
+    return match.group(0).upper() if match else None
+
+
 MOCK_WITHDRAWAL_SERVICE: Final = MockWithdrawalService()
+MOCK_DEPOSIT_SERVICE: Final = MockDepositService()

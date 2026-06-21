@@ -529,6 +529,62 @@ def test_conversation_service_requests_order_id_for_tracking_query() -> None:
     assert repository.saved["assistant_sources"] == []
 
 
+def test_conversation_service_requests_txid_for_deposit_query() -> None:
+    repository = FakeConversationRepository()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "我的充值一直没到账"))
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。"
+    )
+    assert repository.saved["assistant_sources"] == []
+
+
+def test_conversation_service_routes_deposit_txid_to_business_query() -> None:
+    repository = FakeConversationRepository()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "帮我查 tx-10001"))
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "Mock 查询结果：充值 TxID TX-10001，状态 success，数量 88.00 USDT，"
+        "网络 TRC20，更新时间 2026-06-20T12:30:00+08:00。"
+    )
+    assert repository.saved["assistant_sources"] == []
+
+
+def test_conversation_service_does_not_expose_another_users_deposit() -> None:
+    repository = FakeConversationRepository()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "帮我查 TX-10002"))
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "未找到当前用户的充值记录 TX-10002。"
+        "请确认 TxID、充值网络和到账账户是否正确。"
+    )
+    assert repository.saved["assistant_sources"] == []
+
+
 def test_conversation_service_uses_intent_rules_in_production_path() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(

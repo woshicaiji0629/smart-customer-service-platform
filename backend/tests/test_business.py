@@ -3,7 +3,9 @@ from fastapi.testclient import TestClient
 from customer_service.auth.api import get_session_store
 from customer_service.auth.session import AuthenticatedUser
 from customer_service.business.service import (
+    MOCK_DEPOSIT_SERVICE,
     MOCK_WITHDRAWAL_SERVICE,
+    extract_deposit_txid,
     extract_withdrawal_order_id,
     is_withdrawal_tracking_query,
 )
@@ -63,6 +65,33 @@ def test_withdrawal_query_requires_login() -> None:
     assert response.json() == {"detail": "请先登录"}
 
 
+def test_deposit_query_returns_current_users_record() -> None:
+    app.dependency_overrides[get_session_store] = FakeSessionStore
+    try:
+        client = TestClient(app)
+        client.cookies.set("smart_support_session", "alice-session")
+        response = client.get("/business/deposits/TX-10001")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert response.json()["txid"] == "TX-10001"
+
+
+def test_deposit_query_does_not_expose_another_users_record() -> None:
+    app.dependency_overrides[get_session_store] = FakeSessionStore
+    try:
+        client = TestClient(app)
+        client.cookies.set("smart_support_session", "alice-session")
+        response = client.get("/business/deposits/TX-10002")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "未找到该用户的充值记录"}
+
+
 def test_mock_withdrawal_service_normalizes_order_id_case() -> None:
     record = MOCK_WITHDRAWAL_SERVICE.get_withdrawal("10001", "wd-10001")
 
@@ -70,9 +99,21 @@ def test_mock_withdrawal_service_normalizes_order_id_case() -> None:
     assert record.order_id == "WD-10001"
 
 
+def test_mock_deposit_service_normalizes_txid_case() -> None:
+    record = MOCK_DEPOSIT_SERVICE.get_deposit("10001", "tx-10001")
+
+    assert record is not None
+    assert record.txid == "TX-10001"
+
+
 def test_extract_withdrawal_order_id_requires_explicit_mock_id() -> None:
     assert extract_withdrawal_order_id("请查询 wd-10001 的状态") == "WD-10001"
     assert extract_withdrawal_order_id("提现为什么没到账") is None
+
+
+def test_extract_deposit_txid_requires_explicit_mock_id() -> None:
+    assert extract_deposit_txid("帮我查 tx-10001") == "TX-10001"
+    assert extract_deposit_txid("链上 hash 是 0xabc") is None
 
 
 def test_withdrawal_tracking_query_requires_withdrawal_and_status_term() -> None:

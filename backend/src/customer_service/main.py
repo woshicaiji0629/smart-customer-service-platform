@@ -16,7 +16,10 @@ from customer_service.auth.session import (
     RedisSessionStore,
 )
 from customer_service.business.api import router as business_router
-from customer_service.business.service import MOCK_WITHDRAWAL_SERVICE
+from customer_service.business.service import (
+    MOCK_DEPOSIT_SERVICE,
+    MOCK_WITHDRAWAL_SERVICE,
+)
 from customer_service.conversations.api import router as conversation_router
 from customer_service.conversations.repository import ConversationRepository
 from customer_service.conversations.service import ConversationService
@@ -124,6 +127,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             app.state.conversation_service = ConversationService(
                 repository=conversation_repository,
                 rag_service=rag_service,
+                deposit_service=MOCK_DEPOSIT_SERVICE,
                 withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
                 intent_service=IntentService(intent_classifier),
             )

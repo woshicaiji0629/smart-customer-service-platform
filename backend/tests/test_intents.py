@@ -31,6 +31,19 @@ def test_rules_extract_withdrawal_order_without_model_call() -> None:
     assert classifier.messages == []
 
 
+def test_rules_extract_deposit_txid_without_model_call() -> None:
+    classifier = FakeClassifier("not used")
+    service = IntentService(classifier)
+
+    decision = asyncio.run(service.recognize("帮我查询 tx-10001"))
+
+    assert decision.route == "business_query"
+    assert decision.topic == "deposit"
+    assert decision.entities == {"txid": "TX-10001"}
+    assert decision.missing_fields == ()
+    assert classifier.messages == []
+
+
 def test_rules_request_missing_withdrawal_order() -> None:
     decision = asyncio.run(
         IntentService(None).recognize("提现处理到什么进度了？")

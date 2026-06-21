@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Final, Literal, Protocol, cast
 
 from customer_service.business.service import (
+    extract_deposit_txid,
     extract_withdrawal_order_id,
     is_withdrawal_tracking_query,
 )
@@ -47,7 +48,7 @@ VALID_TOPICS: Final = frozenset(
     }
 )
 ALLOWED_ENTITY_KEYS: Final = frozenset(
-    {"order_id", "coin", "network", "verification_type", "failure_reason"}
+    {"order_id", "txid", "coin", "network", "verification_type", "failure_reason"}
 )
 MIN_INTENT_CONFIDENCE: Final = 0.60
 HUMAN_ONLY_RE: Final = re.compile(
@@ -103,7 +104,7 @@ JSON 字段：
 
 规则：
 1. 用户描述了可处理的具体问题时，即使提到人工，也优先识别具体问题，不选 human_request。
-2. business_query 当前仅用于查询具体提现订单状态，缺少 order_id 时放入 missing_fields。
+2. business_query 当前仅用于查询具体提现订单状态或具体充值 TxID 状态，缺少必要字段时放入 missing_fields。
 3. 平台操作、规则、故障排查使用 knowledge_rag。
 4. 只有用户没有提供具体问题且明确只要求人工时，使用 human_request。
 5. 与交易所客服无关的问题使用 out_of_scope。
@@ -204,6 +205,15 @@ def _recognize_with_rules(content: str) -> IntentDecision | None:
             entities={"order_id": order_id},
             missing_fields=(),
         )
+    txid = extract_deposit_txid(content)
+    if txid is not None:
+        return IntentDecision(
+            route="business_query",
+            topic="deposit",
+            confidence=1.0,
+            entities={"txid": txid},
+            missing_fields=(),
+        )
     if any(term in content for term in ACCOUNT_SECURITY_TOPIC_TERMS):
         return _knowledge_decision("account_security")
     if (
@@ -291,7 +301,10 @@ def _apply_routing_policy(content: str, decision: IntentDecision) -> IntentDecis
             entities={},
             missing_fields=(),
         )
-    if decision.route == "business_query" and decision.topic != "withdrawal":
+    if decision.route == "business_query" and decision.topic not in {
+        "withdrawal",
+        "deposit",
+    }:
         return IntentDecision(
             route="knowledge_rag",
             topic=decision.topic,
