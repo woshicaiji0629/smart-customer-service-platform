@@ -656,6 +656,33 @@ def test_conversation_service_requests_txid_for_deposit_query() -> None:
     assert repository.traces[0]["handling_result"] == "missing_deposit_txid"
 
 
+def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
+    repository = FakeConversationRepository()
+    rag_service = FakeRagService()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=rag_service,  # type: ignore[arg-type]
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "充值需要多少个区块确认"))
+
+    assert rag_service.question == "充值需要多少个区块确认"
+    assert repository.saved is not None
+    assert repository.saved["assistant_sources"] == [
+        {
+            "article_id": "article-1",
+            "title": "提现没有到账",
+            "source_url": "https://example.com/article-1",
+        }
+    ]
+    assert repository.traces[0]["route"] == "knowledge_rag"
+    assert repository.traces[0]["category"] == "deposit"
+    assert repository.traces[0]["intent"] == "rule"
+    assert repository.traces[0]["handling_result"] == "rag_answer"
+
+
 def test_conversation_service_routes_deposit_txid_to_business_query() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(

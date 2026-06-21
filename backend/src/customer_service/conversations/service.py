@@ -198,7 +198,9 @@ class ConversationService:
                     else "business_withdrawal_not_found"
                 ),
             )
-        if decision.category == "deposit":
+        if decision.category == "deposit" and (
+            decision.route == "business_query" or decision.intent == "missing_arrival"
+        ):
             txid = decision.entities.get("txid") or extract_deposit_txid(content)
             if not txid:
                 return IntentAnswer(
