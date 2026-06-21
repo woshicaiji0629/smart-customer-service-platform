@@ -261,3 +261,18 @@ def test_default_intent_evaluation_cases_are_valid() -> None:
         "identity_verification",
         "account_security",
     }
+    assert {case.expected_intent for case in cases} >= {
+        "status_query",
+        "missing_arrival",
+        "failure_reason",
+        "fee_rule",
+        "memo_tag_issue",
+        "verification_failure",
+        "compromised",
+        "two_factor_issue",
+        "trading_question",
+        "platform_operation",
+        "human_only",
+        "out_of_scope",
+        "unknown",
+    }
