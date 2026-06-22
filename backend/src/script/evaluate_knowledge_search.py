@@ -35,6 +35,7 @@ class EvaluationCase:
     kind: Literal["positive", "out_of_domain"]
     query: str
     expected_article_ids: frozenset[str]
+    category: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +50,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", type=Path, default=DEFAULT_CASES_PATH)
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+    parser.add_argument(
+        "--include-keyword",
+        action="store_true",
+        help="追加简单关键词召回结果，用于对比混合检索效果。",
+    )
     return parser.parse_args()
 
 
@@ -73,7 +79,12 @@ async def run(args: argparse.Namespace) -> None:
                 embedding_client=embedding_client,
             )
             for case in cases:
-                results = await service.search(case.query, limit=args.limit)
+                results = await service.search(
+                    case.query,
+                    limit=args.limit,
+                    category=case.category,
+                    include_keyword=args.include_keyword,
+                )
                 rank = find_expected_rank(results, case.expected_article_ids)
                 top_score = results[0].score if results else None
                 if case.kind == "positive":
@@ -81,6 +92,7 @@ async def run(args: argparse.Namespace) -> None:
                     matched_score = _matched_score(results, case.expected_article_ids)
                     print(
                         f"[{case.case_id}] rank={rank or '-'} "
+                        f"category={case.category or '-'} "
                         f"top_score={_format_score(top_score)} "
                         f"matched_score={_format_score(matched_score)}"
                     )
@@ -88,6 +100,7 @@ async def run(args: argparse.Namespace) -> None:
                     top_title = results[0].title if results else "-"
                     print(
                         f"[{case.case_id}] out_of_domain "
+                        f"category={case.category or '-'} "
                         f"top_score={_format_score(top_score)} top={top_title}"
                     )
     finally:
@@ -95,6 +108,7 @@ async def run(args: argparse.Namespace) -> None:
 
     metrics = calculate_metrics(positive_ranks)
     print()
+    print(f"include_keyword={args.include_keyword}")
     print(f"positive_cases={len(positive_ranks)}")
     print(f"Hit@1={metrics.hit_at_1:.3f}")
     print(f"Hit@3={metrics.hit_at_3:.3f}")
@@ -123,6 +137,7 @@ def load_cases(path: Path) -> list[EvaluationCase]:
             raw_expected_ids = raw_case["expected_article_ids"]
         except KeyError as exc:
             raise ValueError("评估用例格式错误") from exc
+        raw_category = raw_case.get("category")
         if not isinstance(case_id, str) or not case_id or case_id in seen_ids:
             raise ValueError(f"评估用例 id 无效或重复: {case_id!r}")
         if kind not in ("positive", "out_of_domain"):
@@ -137,6 +152,7 @@ def load_cases(path: Path) -> list[EvaluationCase]:
             for article_id in raw_expected_ids
         ):
             raise ValueError(f"expected_article_ids 必须是字符串数组: {case_id}")
+        category = _parse_category(case_id, raw_category)
         expected_ids = frozenset(raw_expected_ids)
         if kind == "positive" and not expected_ids:
             raise ValueError(f"正样本缺少 expected_article_ids: {case_id}")
@@ -149,11 +165,23 @@ def load_cases(path: Path) -> list[EvaluationCase]:
                 kind=kind,
                 query=query,
                 expected_article_ids=expected_ids,
+                category=category,
             )
         )
     if not any(case.kind == "positive" for case in cases):
         raise ValueError("评估数据至少需要一个正样本")
     return cases
+
+
+def _parse_category(case_id: str, value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"category 必须是字符串: {case_id}")
+    category = value.strip()
+    if not category:
+        raise ValueError(f"category 不能为空: {case_id}")
+    return category
 
 
 def find_expected_rank(

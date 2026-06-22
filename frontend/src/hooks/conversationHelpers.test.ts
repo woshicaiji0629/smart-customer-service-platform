@@ -45,7 +45,9 @@ describe("composerGuidanceFromMessages", () => {
     const guidance = composerGuidanceFromMessages([
       message("assistant", "请补充信息。", {
         type: "provide_withdrawal_order_id",
+        state: "awaiting_withdrawal_order_id",
         expected_input: "withdrawal_order_id",
+        missing_fields: ["order_id"],
         manual_fallback_candidate: false,
       }),
     ]);
@@ -69,11 +71,45 @@ describe("composerGuidanceFromMessages", () => {
     const guidance = composerGuidanceFromMessages([
       message("assistant", "请补充信息。", {
         type: "provide_deposit_txid",
+        state: "awaiting_deposit_txid",
         expected_input: "deposit_txid",
+        missing_fields: ["txid"],
         manual_fallback_candidate: false,
       }),
     ]);
 
     expect(guidance.placeholder).toBe("输入充值 TxID，例如 TX-10001");
+  });
+
+  it("优先使用结构化状态切换输入提示", () => {
+    const guidance = composerGuidanceFromMessages([
+      message("assistant", "请补充信息。", {
+        type: "clarify_problem",
+        state: "awaiting_deposit_txid",
+        expected_input: "problem_description",
+        missing_fields: ["txid"],
+        manual_fallback_candidate: false,
+      }),
+    ]);
+
+    expect(guidance.placeholder).toBe("输入充值 TxID，例如 TX-10001");
+  });
+
+  it("充值记录未找到时提示补充排查信息", () => {
+    const guidance = composerGuidanceFromMessages([
+      message("assistant", "未找到当前用户的充值记录 TX-10002。", {
+        type: "provide_deposit_followup_details",
+        state: "awaiting_deposit_followup_details",
+        expected_input: "deposit_followup_details",
+        missing_fields: ["coin", "chain", "deposit_time", "page_hint"],
+        manual_fallback_candidate: false,
+      }),
+    ]);
+
+    expect(guidance.placeholder).toBe("补充币种、网络、充值时间和页面提示");
+    expect(guidance.guides).toEqual([
+      "例如 USDT / TRC20 / 今天 14:30",
+      "链上成功但未到账请说明页面提示",
+    ]);
   });
 });

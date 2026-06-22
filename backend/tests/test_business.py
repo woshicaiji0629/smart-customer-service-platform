@@ -6,6 +6,7 @@ from customer_service.business.service import (
     MOCK_DEPOSIT_SERVICE,
     MOCK_WITHDRAWAL_SERVICE,
     extract_deposit_txid,
+    extract_entities,
     extract_withdrawal_order_id,
     is_withdrawal_tracking_query,
 )
@@ -114,6 +115,25 @@ def test_extract_withdrawal_order_id_requires_explicit_mock_id() -> None:
 def test_extract_deposit_txid_requires_explicit_mock_id() -> None:
     assert extract_deposit_txid("帮我查 tx-10001") == "TX-10001"
     assert extract_deposit_txid("链上 hash 是 0xabc") is None
+
+
+def test_extract_entities_normalizes_supported_identifiers() -> None:
+    entities = extract_entities("请查 wd-10001 和 tx-10001")
+
+    assert entities.order_id == "WD-10001"
+    assert entities.txid == "TX-10001"
+    assert entities.to_intent_entities() == {
+        "order_id": "WD-10001",
+        "txid": "TX-10001",
+    }
+
+
+def test_extract_entities_does_not_guess_implicit_values() -> None:
+    entities = extract_entities("提现为什么没到账，链上 hash 是 0xabc")
+
+    assert entities.order_id is None
+    assert entities.txid is None
+    assert entities.to_intent_entities() == {}
 
 
 def test_withdrawal_tracking_query_requires_withdrawal_and_status_term() -> None:

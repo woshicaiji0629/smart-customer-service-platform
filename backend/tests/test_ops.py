@@ -6,8 +6,18 @@ from customer_service.auth.api import get_current_user
 from customer_service.auth.session import AuthenticatedUser
 from customer_service.main import app
 from customer_service.ops.api import get_ops_repository
-from customer_service.ops.repository import TraceBreakdown, TraceCount, TraceSummary
-from script.summarize_conversation_traces import _time_range_from_args
+from customer_service.ops.repository import (
+    TraceBreakdown,
+    TraceCount,
+    TraceSample,
+    TraceSummary,
+)
+from script.summarize_conversation_traces import (
+    DEFAULT_SAMPLE_HANDLING_RESULTS,
+    _sample_candidate,
+    _sample_output,
+    _time_range_from_args,
+)
 
 
 CREATED_AT = datetime(2026, 6, 19, 8, 0, tzinfo=UTC)
@@ -131,6 +141,8 @@ def test_trace_summary_script_validates_time_range_args() -> None:
         start_ts = int(CREATED_AT.timestamp())
         end_ts = int(UPDATED_AT.timestamp())
         limit = 20
+        sample_limit = 20
+        sample_format = "candidate"
 
     start, end = _time_range_from_args(Args())
 
@@ -142,6 +154,8 @@ def test_trace_summary_script_validates_time_range_args() -> None:
         start_ts = int(CREATED_AT.timestamp())
         end_ts = None
         limit = 20
+        sample_limit = 20
+        sample_format = "candidate"
 
     try:
         _time_range_from_args(PartialArgs())
@@ -149,3 +163,70 @@ def test_trace_summary_script_validates_time_range_args() -> None:
         assert "同时提供" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_trace_sample_candidate_serializes_evaluation_context() -> None:
+    sample = TraceSample(
+        user_content="还是不行",
+        route="unknown",
+        category="other",
+        intent="unknown",
+        intent_source="fallback",
+        confidence=0,
+        entities={},
+        missing_fields=[],
+        handling_result="manual_fallback_candidate",
+        created_at=CREATED_AT,
+    )
+
+    assert _sample_candidate(sample) == {
+        "query": "还是不行",
+        "observed_route": "unknown",
+        "observed_category": "other",
+        "observed_intent": "unknown",
+        "observed_handling_result": "manual_fallback_candidate",
+        "intent_source": "fallback",
+        "confidence": 0,
+        "entities": {},
+        "missing_fields": [],
+        "created_at": CREATED_AT.isoformat(),
+    }
+
+
+def test_trace_sample_output_can_render_intent_case_draft() -> None:
+    sample = TraceSample(
+        user_content="还是不行",
+        route="unknown",
+        category="other",
+        intent="unknown",
+        intent_source="fallback",
+        confidence=0,
+        entities={},
+        missing_fields=[],
+        handling_result="manual_fallback_candidate",
+        created_at=CREATED_AT,
+    )
+
+    assert _sample_output(sample, "intent-case-draft") == {
+        "id": "trace_manual_fallback_candidate_20260619080000_7665209c",
+        "query": "还是不行",
+        "expected_route": "unknown",
+        "expected_category": "other",
+        "expected_intent": "unknown",
+        "expected_entities": {},
+        "expected_missing_fields": [],
+        "_review": {
+            "observed_handling_result": "manual_fallback_candidate",
+            "intent_source": "fallback",
+            "confidence": 0,
+            "created_at": CREATED_AT.isoformat(),
+        },
+    }
+
+
+def test_trace_sample_defaults_include_deposit_followup_received() -> None:
+    assert DEFAULT_SAMPLE_HANDLING_RESULTS == (
+        "unknown",
+        "manual_fallback_candidate",
+        "deposit_followup_received",
+    )

@@ -58,7 +58,9 @@ class SourceSnapshotResponse(BaseModel):
 
 class NextActionResponse(BaseModel):
     type: str
+    state: str
     expected_input: str
+    missing_fields: list[str]
     manual_fallback_candidate: bool
 
 

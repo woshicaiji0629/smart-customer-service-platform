@@ -340,6 +340,16 @@ def test_default_intent_evaluation_cases_are_valid() -> None:
     cases = load_cases(DEFAULT_CASES_PATH)
 
     assert len(cases) == 74
+    cases_by_id = {case.case_id: case for case in cases}
+    assert cases_by_id["withdrawal_order_status"].expected_entities == {
+        "order_id": "WD-10001"
+    }
+    assert cases_by_id["withdrawal_missing_order"].expected_missing_fields == (
+        "order_id",
+    )
+    assert cases_by_id["frontend_deposit_txid"].expected_entities == {
+        "txid": "TX-10001"
+    }
     assert {case.expected_category for case in cases} >= {
         "withdrawal",
         "identity_verification",
@@ -370,6 +380,8 @@ def test_intent_evaluation_summary_counts_mismatch_types() -> None:
             expected_route="business_query",
             expected_category="withdrawal",
             expected_intent="status_query",
+            expected_entities={"order_id": "WD-10001"},
+            expected_missing_fields=(),
         ),
         IntentEvaluationCase(
             case_id="wrong_category",
@@ -377,6 +389,7 @@ def test_intent_evaluation_summary_counts_mismatch_types() -> None:
             expected_route="knowledge_rag",
             expected_category="deposit",
             expected_intent="missing_arrival",
+            expected_entities={"txid": "TX-10001"},
         ),
         IntentEvaluationCase(
             case_id="wrong_all",
@@ -384,6 +397,7 @@ def test_intent_evaluation_summary_counts_mismatch_types() -> None:
             expected_route="out_of_scope",
             expected_category="other",
             expected_intent="out_of_scope",
+            expected_missing_fields=("order_id",),
         ),
     ]
     results = [
@@ -420,8 +434,12 @@ def test_intent_evaluation_summary_counts_mismatch_types() -> None:
 
     assert summary.total == 3
     assert summary.correct_full == 1
+    assert summary.entity_cases == 2
+    assert summary.correct_entities == 1
+    assert summary.missing_field_cases == 2
+    assert summary.correct_missing_fields == 1
     assert summary.source_counts == {"rule": 1, "model": 1, "fallback": 1}
     assert summary.mismatch_counts == {
-        "category": 1,
-        "route+intent": 1,
+        "category+entities": 1,
+        "route+intent+missing_fields": 1,
     }

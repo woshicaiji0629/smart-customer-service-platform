@@ -1,0 +1,127 @@
+{
+  "cases": [
+    {
+      "id": "deposit_missing_arrival_followup",
+      "user_id": "10001",
+      "turns": [
+        {
+          "user": "我的充值一直没到账",
+          "expected_assistant_contains": "请提供充值 TxID",
+          "expected_next_action_state": "awaiting_deposit_txid",
+          "expected_trace": {
+            "route": "knowledge_rag",
+            "category": "deposit",
+            "intent": "missing_arrival",
+            "handling_result": "missing_deposit_txid"
+          }
+        },
+        {
+          "user": "10002",
+          "expected_assistant_contains": "未找到当前用户的充值记录 TX-10002",
+          "expected_next_action_state": "awaiting_deposit_followup_details",
+          "expected_trace": {
+            "route": "business_query",
+            "category": "deposit",
+            "intent": "status_query",
+            "handling_result": "business_deposit_not_found"
+          }
+        },
+        {
+          "user": "USDT，TRC20，今天 14:30，页面显示链上成功但未到账",
+          "expected_assistant_contains": "已记录你的补充信息",
+          "expected_next_action_state": "manual_fallback_candidate",
+          "expected_trace": {
+            "route": "human_request",
+            "category": "deposit",
+            "intent": "followup_details",
+            "handling_result": "deposit_followup_received"
+          }
+        }
+      ]
+    },
+    {
+      "id": "withdrawal_missing_order_followup",
+      "user_id": "10001",
+      "turns": [
+        {
+          "user": "我的提现处理到什么进度了？",
+          "expected_assistant_contains": "请提供提现订单号",
+          "expected_next_action_state": "awaiting_withdrawal_order_id",
+          "expected_trace": {
+            "route": "business_query",
+            "category": "withdrawal",
+            "intent": "missing_arrival",
+            "handling_result": "missing_withdrawal_order_id"
+          }
+        },
+        {
+          "user": "10001",
+          "expected_assistant_contains": "提现订单 WD-10001",
+          "expected_next_action_state": null,
+          "expected_trace": {
+            "route": "business_query",
+            "category": "withdrawal",
+            "intent": "status_query",
+            "handling_result": "business_withdrawal_found"
+          }
+        }
+      ]
+    },
+    {
+      "id": "repeated_unknown_manual_fallback",
+      "user_id": "10001",
+      "turns": [
+        {
+          "user": "这个怎么弄",
+          "expected_assistant_contains": "请补充说明你遇到的具体问题",
+          "expected_next_action_state": "awaiting_problem_description",
+          "expected_trace": {
+            "route": "unknown",
+            "category": "other",
+            "intent": "unknown",
+            "handling_result": "unknown"
+          }
+        },
+        {
+          "user": "还是不行",
+          "expected_assistant_contains": "本次未解决情况已记录用于后续兜底统计",
+          "expected_next_action_state": "manual_fallback_candidate",
+          "expected_trace": {
+            "route": "unknown",
+            "category": "other",
+            "intent": "unknown",
+            "handling_result": "manual_fallback_candidate"
+          }
+        }
+      ]
+    },
+    {
+      "id": "repeated_human_request_manual_fallback",
+      "user_id": "10001",
+      "turns": [
+        {
+          "user": "人工",
+          "expected_assistant_contains": "请先描述需要解决的具体问题",
+          "expected_next_action_state": "awaiting_problem_description",
+          "expected_trace": {
+            "route": "human_request",
+            "category": "other",
+            "intent": "human_only",
+            "handling_result": "human_request"
+          }
+        },
+        {
+          "user": "人工客服",
+          "expected_assistant_contains": "我已记录你需要人工兜底的诉求",
+          "expected_next_action_state": "manual_fallback_candidate",
+          "expected_trace": {
+            "route": "human_request",
+            "category": "other",
+            "intent": "human_only",
+            "handling_result": "manual_fallback_candidate"
+          }
+        }
+      ]
+    }
+  ]
+}

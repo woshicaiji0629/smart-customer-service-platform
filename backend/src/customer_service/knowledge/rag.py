@@ -89,6 +89,7 @@ class RagService:
         question: str,
         *,
         history: Sequence[RagHistoryMessage] = (),
+        category: str | None = None,
     ) -> RagAnswer:
         normalized_question = question.strip()
         if not normalized_question:
@@ -106,6 +107,7 @@ class RagService:
             for result in await self._search_service.search(
                 search_query,
                 limit=DEFAULT_RAG_SEARCH_LIMIT,
+                category=category,
             )
             if result.score >= self._min_score
         ]

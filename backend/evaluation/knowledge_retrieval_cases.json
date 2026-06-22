@@ -4,73 +4,134 @@
       "id": "withdrawal_not_received",
       "kind": "positive",
       "query": "提现显示完成了，但接收钱包一直没有到账怎么办？",
+      "category": "充值与提现",
       "expected_article_ids": ["12560603820649"]
     },
     {
       "id": "deposit_not_received",
       "kind": "positive",
       "query": "我从别的平台充币到 Bitget 后一直没有到账",
+      "category": "充值与提现",
       "expected_article_ids": ["12560603807342", "12560603811938"]
     },
     {
       "id": "find_txid",
       "kind": "positive",
       "query": "在哪里可以查看一笔转账的 TxID？",
+      "category": "充值与提现",
       "expected_article_ids": ["12560603820704"]
     },
     {
       "id": "assets_frozen",
       "kind": "positive",
       "query": "为什么我账户中的资产被冻结了？",
+      "category": "充值与提现",
       "expected_article_ids": ["12560603820705"]
     },
     {
       "id": "limit_order_not_filled",
       "kind": "positive",
       "query": "我挂的限价单为什么一直没有成交？",
+      "category": "现货交易",
       "expected_article_ids": ["12560603820581"]
     },
     {
       "id": "market_and_limit_orders",
       "kind": "positive",
       "query": "市价单和限价单有什么区别？",
+      "category": "现货交易",
       "expected_article_ids": ["12560603820642"]
     },
     {
       "id": "phishing_link",
       "kind": "positive",
       "query": "收到一个可疑的 Bitget 链接，怎么判断是不是钓鱼？",
+      "category": "账户与安全",
       "expected_article_ids": ["12560603821287", "12560603826152"]
     },
     {
       "id": "account_hacked",
       "kind": "positive",
       "query": "我的账户可能被黑客入侵了，应该立即做什么？",
+      "category": "账户与安全",
       "expected_article_ids": ["12560603821284"]
     },
     {
       "id": "identity_verification_failed",
       "kind": "positive",
       "query": "实名认证一直失败，常见原因有哪些？",
+      "category": "身份认证",
       "expected_article_ids": ["12560603808909"]
     },
     {
       "id": "kyb_documents",
       "kind": "positive",
       "query": "企业认证需要提前准备哪些资料？",
+      "category": "身份认证",
       "expected_article_ids": ["12560603820575"]
     },
     {
       "id": "reset_password",
       "kind": "positive",
       "query": "忘记 Bitget 登录密码后怎么重置？",
+      "category": "账户与安全",
       "expected_article_ids": ["12560603821821", "12560603821823"]
     },
     {
       "id": "verification_sms_missing",
       "kind": "positive",
       "query": "登录时一直收不到手机验证码怎么办？",
+      "category": "账户与安全",
       "expected_article_ids": ["12560603821282"]
+    },
+    {
+      "id": "deposit_missing_memo_tag",
+      "kind": "positive",
+      "query": "XRP 充值忘记填 Tag 或 Memo 怎么找回？",
+      "category": "充值与提现",
+      "expected_article_ids": ["12560603811939"]
+    },
+    {
+      "id": "deposit_wrong_chain",
+      "kind": "positive",
+      "query": "USDT 充值时区块链网络选错了怎么办？",
+      "category": "充值与提现",
+      "expected_article_ids": ["12560603820594"]
+    },
+    {
+      "id": "find_contract_address",
+      "kind": "positive",
+      "query": "在哪里查币种合约地址？",
+      "category": "充值与提现",
+      "expected_article_ids": ["12560603829227"]
+    },
+    {
+      "id": "boost_bep20_support",
+      "kind": "positive",
+      "query": "BOOST 是否支持 BEP20 网络充值？",
+      "category": "充值与提现",
+      "expected_article_ids": ["12560603837887"]
+    },
+    {
+      "id": "account_pin_setup",
+      "kind": "positive",
+      "query": "如何设置 Bitget 账户 PIN 码？",
+      "category": "账户与安全",
+      "expected_article_ids": ["12560603821292", "12560603821291"]
+    },
+    {
+      "id": "edd_documents",
+      "kind": "positive",
+      "query": "EDD 加强尽职调查需要提供哪些文件？",
+      "category": "身份认证",
+      "expected_article_ids": ["12560603849340"]
+    },
+    {
+      "id": "kyb_faq",
+      "kind": "positive",
+      "query": "KYB 企业认证常见问题有哪些？",
+      "category": "身份认证",
+      "expected_article_ids": ["12560603803363"]
     },
     {
       "id": "weather_question",

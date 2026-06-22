@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from pgvector.sqlalchemy import Vector
@@ -16,8 +17,10 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    desc,
     delete,
     func,
+    or_,
     select,
     text,
 )
@@ -29,6 +32,7 @@ from customer_service.knowledge.documents import KnowledgeChunk, KnowledgeDocume
 
 EMBEDDING_DIMENSIONS = 1_024
 MAX_SEARCH_LIMIT = 100
+KEYWORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*|[\u4e00-\u9fff]{2,}")
 metadata = MetaData()
 
 knowledge_documents = Table(
@@ -196,6 +200,7 @@ class KnowledgeRepository:
         query_vector: list[float],
         *,
         limit: int = 5,
+        category: str | None = None,
     ) -> list[SearchResult]:
         if len(query_vector) != EMBEDDING_DIMENSIONS:
             raise ValueError(f"查询向量维度必须是 {EMBEDDING_DIMENSIONS}")
@@ -220,6 +225,8 @@ class KnowledgeRepository:
             .order_by(distance)
             .limit(limit)
         )
+        if category is not None:
+            statement = statement.where(knowledge_documents.c.category == category)
         async with self.engine.connect() as connection:
             rows = (await connection.execute(statement)).mappings()
             return [
@@ -233,3 +240,85 @@ class KnowledgeRepository:
                 )
                 for row in rows
             ]
+
+    async def keyword_search(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+        category: str | None = None,
+    ) -> list[SearchResult]:
+        tokens = _keyword_tokens(query)
+        if not tokens:
+            return []
+        if limit <= 0:
+            raise ValueError("limit 必须大于 0")
+        if limit > MAX_SEARCH_LIMIT:
+            raise ValueError(f"limit 不能超过 {MAX_SEARCH_LIMIT}")
+        conditions = []
+        score_parts = []
+        for token in tokens:
+            pattern = f"%{token}%"
+            title_match = knowledge_documents.c.title.ilike(pattern)
+            heading_match = knowledge_chunks.c.heading.ilike(pattern)
+            content_match = knowledge_chunks.c.content.ilike(pattern)
+            conditions.append(or_(title_match, heading_match, content_match))
+            score_parts.extend(
+                [
+                    func.coalesce(title_match.cast(Integer), 0) * 3,
+                    func.coalesce(heading_match.cast(Integer), 0) * 2,
+                    func.coalesce(content_match.cast(Integer), 0),
+                ]
+            )
+        score = sum(score_parts)
+        statement = (
+            select(
+                knowledge_chunks.c.article_id,
+                knowledge_documents.c.title,
+                knowledge_documents.c.source_url,
+                knowledge_chunks.c.heading,
+                knowledge_chunks.c.content,
+                score.label("score"),
+            )
+            .join(
+                knowledge_documents,
+                knowledge_documents.c.article_id == knowledge_chunks.c.article_id,
+            )
+            .where(or_(*conditions))
+            .order_by(
+                desc(score),
+                knowledge_chunks.c.article_id,
+                knowledge_chunks.c.chunk_index,
+            )
+            .limit(limit)
+        )
+        if category is not None:
+            statement = statement.where(knowledge_documents.c.category == category)
+        async with self.engine.connect() as connection:
+            rows = (await connection.execute(statement)).mappings()
+            return [
+                SearchResult(
+                    article_id=row["article_id"],
+                    title=row["title"],
+                    source_url=row["source_url"],
+                    heading=row["heading"],
+                    content=row["content"],
+                    score=float(row["score"]),
+                )
+                for row in rows
+            ]
+
+
+def _keyword_tokens(query: str) -> list[str]:
+    seen: set[str] = set()
+    tokens: list[str] = []
+    for token in KEYWORD_RE.findall(query):
+        normalized = token.strip()
+        if len(normalized) < 2:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        tokens.append(normalized)
+    return tokens

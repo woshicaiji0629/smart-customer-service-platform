@@ -60,6 +60,20 @@ class DepositRecord:
     updated_at: str
 
 
+@dataclass(frozen=True, slots=True)
+class ExtractedEntities:
+    order_id: str | None = None
+    txid: str | None = None
+
+    def to_intent_entities(self) -> dict[str, str]:
+        entities: dict[str, str] = {}
+        if self.order_id is not None:
+            entities["order_id"] = self.order_id
+        if self.txid is not None:
+            entities["txid"] = self.txid
+        return entities
+
+
 class WithdrawalLookup(Protocol):
     def get_withdrawal(
         self,
@@ -157,6 +171,13 @@ class MockDepositService:
 def extract_deposit_txid(content: str) -> str | None:
     match = DEPOSIT_TXID_RE.search(content)
     return match.group(0).upper() if match else None
+
+
+def extract_entities(content: str) -> ExtractedEntities:
+    return ExtractedEntities(
+        order_id=extract_withdrawal_order_id(content),
+        txid=extract_deposit_txid(content),
+    )
 
 
 MOCK_WITHDRAWAL_SERVICE: Final = MockWithdrawalService()

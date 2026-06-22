@@ -5,14 +5,20 @@
       "query": "帮我查询 WD-10001 的提现状态",
       "expected_route": "business_query",
       "expected_category": "withdrawal",
-      "expected_intent": "status_query"
+      "expected_intent": "status_query",
+      "expected_entities": {
+        "order_id": "WD-10001"
+      },
+      "expected_missing_fields": []
     },
     {
       "id": "withdrawal_missing_order",
       "query": "我的提现处理到什么进度了？",
       "expected_route": "business_query",
       "expected_category": "withdrawal",
-      "expected_intent": "missing_arrival"
+      "expected_intent": "missing_arrival",
+      "expected_entities": {},
+      "expected_missing_fields": ["order_id"]
     },
     {
       "id": "withdrawal_fee",
@@ -82,14 +88,20 @@
       "query": "这个怎么弄？",
       "expected_route": "unknown",
       "expected_category": "other",
-      "expected_intent": "unknown"
+      "expected_intent": "unknown",
+      "expected_entities": {},
+      "expected_missing_fields": []
     },
     {
       "id": "withdrawal_lowercase_order",
       "query": "查一下 wd-10002 到哪一步了",
       "expected_route": "business_query",
       "expected_category": "withdrawal",
-      "expected_intent": "status_query"
+      "expected_intent": "status_query",
+      "expected_entities": {
+        "order_id": "WD-10002"
+      },
+      "expected_missing_fields": []
     },
     {
       "id": "withdrawal_order_only",
@@ -453,14 +465,22 @@
       "query": "查询 WD-10001",
       "expected_route": "business_query",
       "expected_category": "withdrawal",
-      "expected_intent": "status_query"
+      "expected_intent": "status_query",
+      "expected_entities": {
+        "order_id": "WD-10001"
+      },
+      "expected_missing_fields": []
     },
     {
       "id": "frontend_deposit_txid",
       "query": "查询 TX-10001",
       "expected_route": "business_query",
       "expected_category": "deposit",
-      "expected_intent": "status_query"
+      "expected_intent": "status_query",
+      "expected_entities": {
+        "txid": "TX-10001"
+      },
+      "expected_missing_fields": []
     },
     {
       "id": "human_with_deposit_issue",
@@ -481,14 +501,22 @@
       "query": "订单号是 WD-10001",
       "expected_route": "business_query",
       "expected_category": "withdrawal",
-      "expected_intent": "status_query"
+      "expected_intent": "status_query",
+      "expected_entities": {
+        "order_id": "WD-10001"
+      },
+      "expected_missing_fields": []
     },
     {
       "id": "field_followup_deposit_txid",
       "query": "TxID 是 TX-10001",
       "expected_route": "business_query",
       "expected_category": "deposit",
-      "expected_intent": "status_query"
+      "expected_intent": "status_query",
+      "expected_entities": {
+        "txid": "TX-10001"
+      },
+      "expected_missing_fields": []
     },
     {
       "id": "unknown_generic_failure",

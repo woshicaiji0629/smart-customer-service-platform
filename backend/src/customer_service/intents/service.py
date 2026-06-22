@@ -9,8 +9,7 @@ from dataclasses import dataclass
 from typing import Final, Literal, Protocol, cast
 
 from customer_service.business.service import (
-    extract_deposit_txid,
-    extract_withdrawal_order_id,
+    extract_entities,
     is_withdrawal_tracking_query,
 )
 from customer_service.knowledge.chat import ChatMessage
@@ -297,25 +296,24 @@ def _recognize_with_rules(content: str) -> IntentDecision | None:
             missing_fields=(),
             source="rule",
         )
-    order_id = extract_withdrawal_order_id(content)
-    if order_id is not None:
+    entities = extract_entities(content)
+    if entities.order_id is not None:
         return IntentDecision(
             route="business_query",
             category="withdrawal",
             intent="status_query",
             confidence=1.0,
-            entities={"order_id": order_id},
+            entities=entities.to_intent_entities(),
             missing_fields=(),
             source="rule",
         )
-    txid = extract_deposit_txid(content)
-    if txid is not None:
+    if entities.txid is not None:
         return IntentDecision(
             route="business_query",
             category="deposit",
             intent="status_query",
             confidence=1.0,
-            entities={"txid": txid},
+            entities=entities.to_intent_entities(),
             missing_fields=(),
             source="rule",
         )

@@ -17,7 +17,7 @@ from customer_service.business.service import (
     MOCK_DEPOSIT_SERVICE,
     WithdrawalLookup,
     WithdrawalRecord,
-    extract_deposit_txid,
+    extract_entities,
 )
 from customer_service.conversations.repository import (
     ConversationCursor,
@@ -46,6 +46,14 @@ WITHDRAWAL_ORDER_ID_PROMPT = (
     "请提供提现订单号，例如 WD-10001，我可以帮你查询处理状态。"
 )
 DEPOSIT_TXID_PROMPT = "请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。"
+DEPOSIT_FOLLOWUP_FIELDS = ["coin", "chain", "deposit_time", "page_hint"]
+DEPOSIT_FOLLOWUP_PROMPT = (
+    "如果链上已成功但仍未到账，请继续补充币种、网络、充值时间和页面提示"
+)
+DEPOSIT_FOLLOWUP_RECEIVED_PROMPT = (
+    "已记录你的补充信息。当前还无法自动确认链上状态或入账原因，"
+    "我会把这类情况计入人工兜底候选；如还有截图或更完整页面提示，可以继续补充。"
+)
 UNKNOWN_INTENT_PROMPT = "请补充说明你遇到的具体问题、操作步骤或页面提示。"
 UNKNOWN_INTENT_FALLBACK_PROMPT = (
     "我还无法判断具体问题。请从提现、充值、身份认证、账户安全中选择一个方向，"
@@ -72,6 +80,34 @@ class IntentAnswer:
     answer: RagAnswer
     handling_result: str
     next_action: dict[str, object] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BusinessTask:
+    entity_key: str
+    missing_prompt: str
+    next_action_type: str
+    missing_result: str
+    found_result: str
+    not_found_result: str
+
+
+WITHDRAWAL_STATUS_TASK = BusinessTask(
+    entity_key="order_id",
+    missing_prompt=WITHDRAWAL_ORDER_ID_PROMPT,
+    next_action_type="provide_withdrawal_order_id",
+    missing_result="missing_withdrawal_order_id",
+    found_result="business_withdrawal_found",
+    not_found_result="business_withdrawal_not_found",
+)
+DEPOSIT_STATUS_TASK = BusinessTask(
+    entity_key="txid",
+    missing_prompt=DEPOSIT_TXID_PROMPT,
+    next_action_type="provide_deposit_txid",
+    missing_result="missing_deposit_txid",
+    found_result="business_deposit_found",
+    not_found_result="business_deposit_not_found",
+)
 
 
 class ConversationService:
@@ -196,42 +232,48 @@ class ConversationService:
         history: list[RagHistoryMessage],
     ) -> IntentAnswer:
         if decision.route == "business_query" and decision.category == "withdrawal":
-            order_id = decision.entities.get("order_id")
-            if not order_id or "order_id" in decision.missing_fields:
-                return IntentAnswer(
-                    answer=RagAnswer(answer=WITHDRAWAL_ORDER_ID_PROMPT, sources=[]),
-                    handling_result="missing_withdrawal_order_id",
-                    next_action=_next_action("provide_withdrawal_order_id"),
-                )
+            order_id = _task_entity(
+                decision,
+                WITHDRAWAL_STATUS_TASK,
+                respect_missing_fields=True,
+            )
+            if not order_id:
+                return _missing_task_answer(WITHDRAWAL_STATUS_TASK)
             withdrawal = self._withdrawal_service.get_withdrawal(user_id, order_id)
             return IntentAnswer(
                 answer=RagAnswer(
                     answer=_withdrawal_answer(order_id, withdrawal),
                     sources=[],
                 ),
-                handling_result=(
-                    "business_withdrawal_found"
-                    if withdrawal is not None
-                    else "business_withdrawal_not_found"
-                ),
+                handling_result=_task_result(WITHDRAWAL_STATUS_TASK, withdrawal),
             )
         if decision.category == "deposit" and (
             decision.route == "business_query" or decision.intent == "missing_arrival"
         ):
-            txid = decision.entities.get("txid") or extract_deposit_txid(content)
+            txid = _task_entity(
+                decision,
+                DEPOSIT_STATUS_TASK,
+                fallback=extract_entities(content).txid,
+            )
             if not txid:
-                return IntentAnswer(
-                    answer=RagAnswer(answer=DEPOSIT_TXID_PROMPT, sources=[]),
-                    handling_result="missing_deposit_txid",
-                    next_action=_next_action("provide_deposit_txid"),
-                )
+                return _missing_task_answer(DEPOSIT_STATUS_TASK)
             deposit = self._deposit_service.get_deposit(user_id, txid)
             return IntentAnswer(
                 answer=RagAnswer(answer=_deposit_answer(txid, deposit), sources=[]),
-                handling_result=(
-                    "business_deposit_found"
-                    if deposit is not None
-                    else "business_deposit_not_found"
+                handling_result=_task_result(DEPOSIT_STATUS_TASK, deposit),
+                next_action=(
+                    _next_action("provide_deposit_followup_details")
+                    if deposit is None
+                    else None
+                ),
+            )
+        if decision.category == "deposit" and decision.intent == "followup_details":
+            return IntentAnswer(
+                answer=RagAnswer(answer=DEPOSIT_FOLLOWUP_RECEIVED_PROMPT, sources=[]),
+                handling_result="deposit_followup_received",
+                next_action=_next_action(
+                    "clarify_problem",
+                    manual_fallback_candidate=True,
                 ),
             )
         if decision.route == "out_of_scope":
@@ -282,7 +324,11 @@ class ConversationService:
         if self._rag_service is None:
             raise RagUnavailableError
         return IntentAnswer(
-            answer=await self._rag_service.answer(content, history=history),
+            answer=await self._rag_service.answer(
+                content,
+                history=history,
+                category=_knowledge_category_for_intent(decision),
+            ),
             handling_result="rag_answer",
         )
 
@@ -348,6 +394,16 @@ def _apply_pending_intent(
     if decision.route != "unknown":
         return decision, content
     pending_category = _pending_category_from_history(history)
+    if pending_category == "deposit_followup":
+        return IntentDecision(
+            route="human_request",
+            category="deposit",
+            intent="followup_details",
+            confidence=1.0,
+            entities={},
+            missing_fields=(),
+            source="fallback",
+        ), content
     if pending_category == "deposit":
         normalized_content = _prefixed_pending_identifier(content, prefix="TX")
         entities = {"txid": normalized_content} if normalized_content != content else {}
@@ -392,12 +448,49 @@ def _pending_category_from_history(history: list[MessageRecord]) -> str | None:
         content = getattr(message, "content", "")
         if role != "assistant" or not isinstance(content, str):
             continue
+        if DEPOSIT_FOLLOWUP_PROMPT in content:
+            return "deposit_followup"
         if DEPOSIT_TXID_PROMPT in content:
             return "deposit"
         if WITHDRAWAL_ORDER_ID_PROMPT in content:
             return "withdrawal"
         return None
     return None
+
+
+def _missing_task_answer(task: BusinessTask) -> IntentAnswer:
+    return IntentAnswer(
+        answer=RagAnswer(answer=task.missing_prompt, sources=[]),
+        handling_result=task.missing_result,
+        next_action=_next_action(task.next_action_type),
+    )
+
+
+def _task_entity(
+    decision: IntentDecision,
+    task: BusinessTask,
+    *,
+    fallback: str | None = None,
+    respect_missing_fields: bool = False,
+) -> str | None:
+    if respect_missing_fields and task.entity_key in decision.missing_fields:
+        return None
+    return decision.entities.get(task.entity_key) or fallback
+
+
+def _task_result(task: BusinessTask, record: object | None) -> str:
+    return task.found_result if record is not None else task.not_found_result
+
+
+def _knowledge_category_for_intent(decision: IntentDecision) -> str | None:
+    categories = {
+        "withdrawal": "充值与提现",
+        "deposit": "充值与提现",
+        "identity_verification": "身份认证",
+        "account_security": "账户与安全",
+        "spot_trading": "现货交易",
+    }
+    return categories.get(decision.category)
 
 
 def _next_action(
@@ -408,11 +501,30 @@ def _next_action(
     expected_input_by_type = {
         "provide_withdrawal_order_id": "withdrawal_order_id",
         "provide_deposit_txid": "deposit_txid",
+        "provide_deposit_followup_details": "deposit_followup_details",
         "clarify_problem": "problem_description",
+    }
+    missing_fields_by_type = {
+        "provide_withdrawal_order_id": ["order_id"],
+        "provide_deposit_txid": ["txid"],
+        "provide_deposit_followup_details": DEPOSIT_FOLLOWUP_FIELDS,
+        "clarify_problem": ["problem_description"],
+    }
+    state_by_type = {
+        "provide_withdrawal_order_id": "awaiting_withdrawal_order_id",
+        "provide_deposit_txid": "awaiting_deposit_txid",
+        "provide_deposit_followup_details": "awaiting_deposit_followup_details",
+        "clarify_problem": (
+            "manual_fallback_candidate"
+            if manual_fallback_candidate
+            else "awaiting_problem_description"
+        ),
     }
     return {
         "type": action_type,
+        "state": state_by_type[action_type],
         "expected_input": expected_input_by_type[action_type],
+        "missing_fields": missing_fields_by_type[action_type],
         "manual_fallback_candidate": manual_fallback_candidate,
     }
 
@@ -452,7 +564,9 @@ def _deposit_answer(
     if deposit is None:
         return (
             f"未找到当前用户的充值记录 {txid}。"
-            "请确认 TxID、充值网络和到账账户是否正确。"
+            "请先确认 TxID、充值网络和到账账户是否正确。"
+            f"{DEPOSIT_FOLLOWUP_PROMPT}，"
+            "我会根据这些信息继续排查。"
         )
     return (
         f"Mock 查询结果：充值 TxID {deposit.txid}，"

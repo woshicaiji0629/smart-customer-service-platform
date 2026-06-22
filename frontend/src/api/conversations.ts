@@ -11,16 +11,27 @@ export interface SourceSnapshot {
 export type NextActionType =
   | "provide_withdrawal_order_id"
   | "provide_deposit_txid"
+  | "provide_deposit_followup_details"
   | "clarify_problem";
 
 export type ExpectedInput =
   | "withdrawal_order_id"
   | "deposit_txid"
+  | "deposit_followup_details"
   | "problem_description";
+
+export type ConversationState =
+  | "awaiting_withdrawal_order_id"
+  | "awaiting_deposit_txid"
+  | "awaiting_deposit_followup_details"
+  | "awaiting_problem_description"
+  | "manual_fallback_candidate";
 
 export interface NextAction {
   type: NextActionType;
+  state: ConversationState;
   expected_input: ExpectedInput;
+  missing_fields: string[];
   manual_fallback_candidate: boolean;
 }
 

@@ -52,6 +52,23 @@ USER_ID = "10001"
 OTHER_USER_ID = "10002"
 CURRENT_USER = AuthenticatedUser(USER_ID, "模拟用户 Alice")
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+DEPOSIT_NOT_FOUND_PREFIX = (
+    "未找到当前用户的充值记录 {txid}。"
+    "请先确认 TxID、充值网络和到账账户是否正确。"
+    "如果链上已成功但仍未到账，请继续补充币种、网络、充值时间和页面提示，"
+    "我会根据这些信息继续排查。"
+)
+DEPOSIT_FOLLOWUP_RECEIVED_PROMPT = (
+    "已记录你的补充信息。当前还无法自动确认链上状态或入账原因，"
+    "我会把这类情况计入人工兜底候选；如还有截图或更完整页面提示，可以继续补充。"
+)
+DEPOSIT_FOLLOWUP_NEXT_ACTION = {
+    "type": "provide_deposit_followup_details",
+    "state": "awaiting_deposit_followup_details",
+    "expected_input": "deposit_followup_details",
+    "missing_fields": ["coin", "chain", "deposit_time", "page_hint"],
+    "manual_fallback_candidate": False,
+}
 
 
 def _conversation() -> ConversationRecord:
@@ -196,15 +213,18 @@ class FakeRagService:
     def __init__(self) -> None:
         self.question: str | None = None
         self.history: list[RagHistoryMessage] = []
+        self.category: str | None = None
 
     async def answer(
         self,
         question: str,
         *,
         history: list[RagHistoryMessage],
+        category: str | None = None,
     ) -> RagAnswer:
         self.question = question
         self.history = history
+        self.category = category
         return RagAnswer(
             answer="请查询 TxID。[资料 1]",
             sources=[
@@ -640,7 +660,9 @@ def test_conversation_service_requests_order_id_for_tracking_query() -> None:
     assert repository.traces[0]["missing_fields"] == ("order_id",)
     assert turn.next_action == {
         "type": "provide_withdrawal_order_id",
+        "state": "awaiting_withdrawal_order_id",
         "expected_input": "withdrawal_order_id",
+        "missing_fields": ["order_id"],
         "manual_fallback_candidate": False,
     }
 
@@ -668,7 +690,9 @@ def test_conversation_service_requests_txid_for_deposit_query() -> None:
     assert repository.traces[0]["handling_result"] == "missing_deposit_txid"
     assert turn.next_action == {
         "type": "provide_deposit_txid",
+        "state": "awaiting_deposit_txid",
         "expected_input": "deposit_txid",
+        "missing_fields": ["txid"],
         "manual_fallback_candidate": False,
     }
 
@@ -701,7 +725,13 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
 
 
 @pytest.mark.parametrize(
-    ("decision", "expected_content", "expected_sources", "expected_handling_result"),
+    (
+        "decision",
+        "expected_content",
+        "expected_sources",
+        "expected_handling_result",
+        "expected_knowledge_category",
+    ),
     [
         (
             IntentDecision(
@@ -721,6 +751,7 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
                 }
             ],
             "rag_answer",
+            "充值与提现",
         ),
         (
             IntentDecision(
@@ -740,6 +771,7 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
                 }
             ],
             "rag_answer",
+            "充值与提现",
         ),
         (
             IntentDecision(
@@ -759,6 +791,7 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
                 }
             ],
             "rag_answer",
+            "身份认证",
         ),
         (
             IntentDecision(
@@ -778,6 +811,47 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
                 }
             ],
             "rag_answer",
+            "账户与安全",
+        ),
+        (
+            IntentDecision(
+                route="knowledge_rag",
+                category="spot_trading",
+                intent="trading_question",
+                confidence=1.0,
+                entities={},
+                missing_fields=(),
+            ),
+            "请查询 TxID。[资料 1]",
+            [
+                {
+                    "article_id": "article-1",
+                    "title": "提现没有到账",
+                    "source_url": "https://example.com/article-1",
+                }
+            ],
+            "rag_answer",
+            "现货交易",
+        ),
+        (
+            IntentDecision(
+                route="knowledge_rag",
+                category="general_platform",
+                intent="platform_operation",
+                confidence=1.0,
+                entities={},
+                missing_fields=(),
+            ),
+            "请查询 TxID。[资料 1]",
+            [
+                {
+                    "article_id": "article-1",
+                    "title": "提现没有到账",
+                    "source_url": "https://example.com/article-1",
+                }
+            ],
+            "rag_answer",
+            None,
         ),
         (
             IntentDecision(
@@ -791,6 +865,7 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
             "请先描述需要解决的具体问题，我会优先尝试自动查询或提供处理方案。",
             [],
             "human_request",
+            None,
         ),
         (
             IntentDecision(
@@ -804,6 +879,7 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
             "我目前只能处理交易所账户、交易和平台使用相关的问题。",
             [],
             "out_of_scope",
+            None,
         ),
         (
             IntentDecision(
@@ -817,6 +893,7 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
             "请补充说明你遇到的具体问题、操作步骤或页面提示。",
             [],
             "unknown",
+            None,
         ),
     ],
 )
@@ -825,6 +902,7 @@ def test_conversation_service_routes_intent_handling_matrix(
     expected_content: str,
     expected_sources: list[dict[str, str]],
     expected_handling_result: str,
+    expected_knowledge_category: str | None,
 ) -> None:
     repository = FakeConversationRepository()
     rag_service = FakeRagService()
@@ -844,6 +922,7 @@ def test_conversation_service_routes_intent_handling_matrix(
     assert repository.traces[0]["category"] == decision.category
     assert repository.traces[0]["intent"] == decision.intent
     assert repository.traces[0]["handling_result"] == expected_handling_result
+    assert rag_service.category == expected_knowledge_category
 
 
 def test_conversation_service_routes_deposit_txid_to_business_query() -> None:
@@ -877,15 +956,15 @@ def test_conversation_service_does_not_expose_another_users_deposit() -> None:
         now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
-    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "帮我查 TX-10002"))
+    turn = asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "帮我查 TX-10002"))
 
     assert repository.saved is not None
-    assert repository.saved["assistant_content"] == (
-        "未找到当前用户的充值记录 TX-10002。"
-        "请确认 TxID、充值网络和到账账户是否正确。"
+    assert repository.saved["assistant_content"] == DEPOSIT_NOT_FOUND_PREFIX.format(
+        txid="TX-10002"
     )
     assert repository.saved["assistant_sources"] == []
     assert repository.traces[0]["handling_result"] == "business_deposit_not_found"
+    assert turn.next_action == DEPOSIT_FOLLOWUP_NEXT_ACTION
 
 
 def test_conversation_service_keeps_pending_deposit_context() -> None:
@@ -947,6 +1026,80 @@ def test_conversation_service_completes_numeric_txid_in_pending_context() -> Non
     )
     assert repository.traces[0]["entities"] == {"txid": "TX-10001"}
     assert repository.traces[0]["handling_result"] == "business_deposit_found"
+
+
+def test_conversation_service_guides_deposit_followup_when_numeric_txid_not_found() -> None:
+    repository = FakeConversationRepository(
+        recent_messages=[
+            _message(
+                message_id=1,
+                role="assistant",
+                content="请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。",
+                created_at=CREATED_AT,
+            )
+        ]
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
+    )
+
+    turn = asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "10002"))
+
+    assert repository.saved is not None
+    assert repository.saved["user_content"] == "10002"
+    assert repository.saved["assistant_content"] == DEPOSIT_NOT_FOUND_PREFIX.format(
+        txid="TX-10002"
+    )
+    assert repository.traces[0]["entities"] == {"txid": "TX-10002"}
+    assert repository.traces[0]["handling_result"] == "business_deposit_not_found"
+    assert turn.next_action == DEPOSIT_FOLLOWUP_NEXT_ACTION
+
+
+def test_conversation_service_records_deposit_followup_details() -> None:
+    repository = FakeConversationRepository(
+        recent_messages=[
+            _message(
+                message_id=1,
+                role="assistant",
+                content=DEPOSIT_NOT_FOUND_PREFIX.format(txid="TX-10002"),
+                created_at=CREATED_AT,
+            )
+        ]
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
+    )
+
+    turn = asyncio.run(
+        service.send_message(
+            USER_ID,
+            CONVERSATION_ID,
+            "USDT，TRC20，今天 14:30，页面显示链上成功但未到账",
+        )
+    )
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == DEPOSIT_FOLLOWUP_RECEIVED_PROMPT
+    assert repository.traces[0]["route"] == "human_request"
+    assert repository.traces[0]["category"] == "deposit"
+    assert repository.traces[0]["intent"] == "followup_details"
+    assert repository.traces[0]["intent_source"] == "fallback"
+    assert repository.traces[0]["handling_result"] == "deposit_followup_received"
+    assert turn.next_action == {
+        "type": "clarify_problem",
+        "state": "manual_fallback_candidate",
+        "expected_input": "problem_description",
+        "missing_fields": ["problem_description"],
+        "manual_fallback_candidate": True,
+    }
 
 
 def test_conversation_service_drops_pending_context_after_inactivity() -> None:
@@ -1086,7 +1239,7 @@ def test_conversation_service_clarifies_unknown_intent_without_model() -> None:
         intent_service=IntentService(None),
     )
 
-    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "这个怎么弄"))
+    turn = asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "这个怎么弄"))
 
     assert repository.saved is not None
     assert repository.saved["assistant_content"] == (
@@ -1095,6 +1248,13 @@ def test_conversation_service_clarifies_unknown_intent_without_model() -> None:
     assert repository.traces[0]["route"] == "unknown"
     assert repository.traces[0]["intent_source"] == "fallback"
     assert repository.traces[0]["handling_result"] == "unknown"
+    assert turn.next_action == {
+        "type": "clarify_problem",
+        "state": "awaiting_problem_description",
+        "expected_input": "problem_description",
+        "missing_fields": ["problem_description"],
+        "manual_fallback_candidate": False,
+    }
 
 
 def test_conversation_service_marks_repeated_unknown_as_manual_fallback_candidate() -> None:
@@ -1126,7 +1286,9 @@ def test_conversation_service_marks_repeated_unknown_as_manual_fallback_candidat
     assert repository.traces[0]["handling_result"] == "manual_fallback_candidate"
     assert turn.next_action == {
         "type": "clarify_problem",
+        "state": "manual_fallback_candidate",
         "expected_input": "problem_description",
+        "missing_fields": ["problem_description"],
         "manual_fallback_candidate": True,
     }
 
@@ -1160,7 +1322,9 @@ def test_conversation_service_marks_repeated_human_request_as_manual_fallback_ca
     assert repository.traces[0]["handling_result"] == "manual_fallback_candidate"
     assert turn.next_action == {
         "type": "clarify_problem",
+        "state": "manual_fallback_candidate",
         "expected_input": "problem_description",
+        "missing_fields": ["problem_description"],
         "manual_fallback_candidate": True,
     }
 
@@ -1266,7 +1430,9 @@ class FakeConversationService:
             assistant_message=_turn().assistant_message,
             next_action={
                 "type": "provide_withdrawal_order_id",
+                "state": "awaiting_withdrawal_order_id",
                 "expected_input": "withdrawal_order_id",
+                "missing_fields": ["order_id"],
                 "manual_fallback_candidate": False,
             },
         )
@@ -1307,7 +1473,9 @@ def test_conversation_api_create_send_and_get_history() -> None:
     )
     assert send_response.json()["assistant_message"]["next_action"] == {
         "type": "provide_withdrawal_order_id",
+        "state": "awaiting_withdrawal_order_id",
         "expected_input": "withdrawal_order_id",
+        "missing_fields": ["order_id"],
         "manual_fallback_candidate": False,
     }
     assert history_response.status_code == 200

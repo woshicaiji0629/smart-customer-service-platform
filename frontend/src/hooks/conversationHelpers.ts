@@ -35,6 +35,11 @@ const DEPOSIT_TXID_GUIDANCE: ComposerGuidance = {
   guides: ["发送 TxID 即可继续查询", "TxID 通常以 TX- 开头"],
 };
 
+const DEPOSIT_FOLLOWUP_GUIDANCE: ComposerGuidance = {
+  placeholder: "补充币种、网络、充值时间和页面提示",
+  guides: ["例如 USDT / TRC20 / 今天 14:30", "链上成功但未到账请说明页面提示"],
+};
+
 export function titleFromQuestion(question: string): string {
   const normalized = question.trim().replace(/\s+/g, " ");
   return normalized.length > TITLE_LENGTH
@@ -57,12 +62,32 @@ export function composerGuidanceFromMessages(
     return DEFAULT_COMPOSER_GUIDANCE;
   }
   if (
+    lastAssistantMessage.next_action?.state === "awaiting_withdrawal_order_id"
+  ) {
+    return WITHDRAWAL_ORDER_GUIDANCE;
+  }
+  if (lastAssistantMessage.next_action?.state === "awaiting_deposit_txid") {
+    return DEPOSIT_TXID_GUIDANCE;
+  }
+  if (
+    lastAssistantMessage.next_action?.state ===
+    "awaiting_deposit_followup_details"
+  ) {
+    return DEPOSIT_FOLLOWUP_GUIDANCE;
+  }
+  if (
     lastAssistantMessage.next_action?.expected_input === "withdrawal_order_id"
   ) {
     return WITHDRAWAL_ORDER_GUIDANCE;
   }
   if (lastAssistantMessage.next_action?.expected_input === "deposit_txid") {
     return DEPOSIT_TXID_GUIDANCE;
+  }
+  if (
+    lastAssistantMessage.next_action?.expected_input ===
+    "deposit_followup_details"
+  ) {
+    return DEPOSIT_FOLLOWUP_GUIDANCE;
   }
   if (lastAssistantMessage.content.includes(WITHDRAWAL_ORDER_PROMPT)) {
     return WITHDRAWAL_ORDER_GUIDANCE;
