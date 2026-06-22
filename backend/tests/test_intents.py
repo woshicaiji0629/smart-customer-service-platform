@@ -62,6 +62,21 @@ def test_rules_extract_deposit_txid_without_model_call() -> None:
     assert classifier.messages == []
 
 
+def test_rule_knowledge_decision_includes_extracted_entities() -> None:
+    decision = asyncio.run(
+        IntentService(None).recognize("USDT 走 TRC20，昨天 09:15 充值没到账")
+    )
+
+    assert decision.route == "knowledge_rag"
+    assert decision.category == "deposit"
+    assert decision.intent == "missing_arrival"
+    assert decision.entities == {
+        "coin": "USDT",
+        "network": "TRC20",
+        "time_hint": "昨天 09:15",
+    }
+
+
 def test_rules_request_missing_withdrawal_order() -> None:
     decision = asyncio.run(
         IntentService(None).recognize("提现处理到什么进度了？")
@@ -70,6 +85,28 @@ def test_rules_request_missing_withdrawal_order() -> None:
     assert decision.route == "business_query"
     assert decision.intent == "missing_arrival"
     assert decision.missing_fields == ("order_id",)
+    assert decision.source == "rule"
+
+
+def test_rules_request_withdrawal_order_for_platform_hold() -> None:
+    decision = asyncio.run(IntentService(None).recognize("提现被风控卡住了"))
+
+    assert decision.route == "business_query"
+    assert decision.category == "withdrawal"
+    assert decision.intent == "missing_arrival"
+    assert decision.missing_fields == ("order_id",)
+    assert decision.source == "rule"
+
+
+def test_rules_route_completed_withdrawal_not_arrived_to_onchain_status() -> None:
+    decision = asyncio.run(
+        IntentService(None).recognize("提现完成但钱包没到账怎么办？")
+    )
+
+    assert decision.route == "knowledge_rag"
+    assert decision.category == "withdrawal"
+    assert decision.intent == "onchain_status"
+    assert decision.missing_fields == ()
     assert decision.source == "rule"
 
 
@@ -103,6 +140,27 @@ def test_model_classifies_category_and_extracts_entities_with_history() -> None:
     assert decision.source == "model"
     assert "个人认证提示证件照片模糊" in classifier.messages[1]["content"]
     assert classifier.purpose == "intent"
+
+
+def test_model_decision_keeps_model_entities_and_adds_local_entities() -> None:
+    classifier = FakeClassifier(
+        '{"route":"knowledge_rag","category":"deposit",'
+        '"intent":"missing_arrival","confidence":0.92,'
+        '"entities":{"coin":"模型币"},"missing_fields":[]}'
+    )
+    service = IntentService(classifier)
+
+    decision = asyncio.run(
+        service.recognize("USDT TRC20 昨天 09:15 这个怎么处理")
+    )
+
+    assert decision.route == "knowledge_rag"
+    assert decision.category == "deposit"
+    assert decision.entities == {
+        "coin": "模型币",
+        "network": "TRC20",
+        "time_hint": "昨天 09:15",
+    }
 
 
 def test_low_confidence_result_falls_back_to_unknown() -> None:
@@ -339,13 +397,19 @@ def test_generic_page_error_remains_unknown() -> None:
 def test_default_intent_evaluation_cases_are_valid() -> None:
     cases = load_cases(DEFAULT_CASES_PATH)
 
-    assert len(cases) == 74
+    assert len(cases) == 77
     cases_by_id = {case.case_id: case for case in cases}
     assert cases_by_id["withdrawal_order_status"].expected_entities == {
         "order_id": "WD-10001"
     }
     assert cases_by_id["withdrawal_missing_order"].expected_missing_fields == (
         "order_id",
+    )
+    assert cases_by_id["withdrawal_platform_risk_hold"].expected_missing_fields == (
+        "order_id",
+    )
+    assert cases_by_id["withdrawal_onchain_completed_not_arrived"].expected_intent == (
+        "onchain_status"
     )
     assert cases_by_id["frontend_deposit_txid"].expected_entities == {
         "txid": "TX-10001"
@@ -360,6 +424,7 @@ def test_default_intent_evaluation_cases_are_valid() -> None:
         "missing_arrival",
         "failure_reason",
         "fee_rule",
+        "onchain_status",
         "memo_tag_issue",
         "verification_failure",
         "compromised",

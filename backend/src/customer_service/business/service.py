@@ -2,21 +2,27 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Final, Literal, Protocol
 
 
-WITHDRAWAL_ORDER_ID_RE: Final = re.compile(r"\bWD-\d+\b", re.IGNORECASE)
-DEPOSIT_TXID_RE: Final = re.compile(r"\bTX-\d+\b", re.IGNORECASE)
-WITHDRAWAL_TRACKING_TERMS: Final = (
-    "到账",
+WITHDRAWAL_STATUS_QUERY_TERMS: Final = (
     "状态",
     "进度",
     "处理中",
-    "完成",
-    "成功",
-    "失败",
+)
+WITHDRAWAL_PLATFORM_HOLD_TERMS: Final = (
+    "审核",
+    "风控",
+    "违规",
+    "限制",
+    "卡住",
+    "不放行",
+    "不能提现",
+    "提不了现",
+    "拒绝",
+    "被拒",
+    "安全限制",
 )
 WITHDRAWAL_PERSONAL_TERMS: Final = (
     "我的",
@@ -27,7 +33,6 @@ WITHDRAWAL_PERSONAL_TERMS: Final = (
     "查一下",
     "进度",
     "状态",
-    "没到账",
 )
 WITHDRAWAL_KNOWLEDGE_TERMS: Final = (
     "一般",
@@ -58,20 +63,6 @@ class DepositRecord:
     status: Literal["confirming", "success"]
     chain: str
     updated_at: str
-
-
-@dataclass(frozen=True, slots=True)
-class ExtractedEntities:
-    order_id: str | None = None
-    txid: str | None = None
-
-    def to_intent_entities(self) -> dict[str, str]:
-        entities: dict[str, str] = {}
-        if self.order_id is not None:
-            entities["order_id"] = self.order_id
-        if self.txid is not None:
-            entities["txid"] = self.txid
-        return entities
 
 
 class WithdrawalLookup(Protocol):
@@ -122,16 +113,14 @@ class MockWithdrawalService:
         return self._records.get(user_id, {}).get(order_id.upper())
 
 
-def extract_withdrawal_order_id(content: str) -> str | None:
-    match = WITHDRAWAL_ORDER_ID_RE.search(content)
-    return match.group(0).upper() if match else None
-
-
 def is_withdrawal_tracking_query(content: str) -> bool:
+    is_withdrawal = "提现" in content or "提現" in content
+    has_platform_hold = any(term in content for term in WITHDRAWAL_PLATFORM_HOLD_TERMS)
+    has_status_query = any(term in content for term in WITHDRAWAL_STATUS_QUERY_TERMS)
+    has_personal_context = any(term in content for term in WITHDRAWAL_PERSONAL_TERMS)
     return (
-        "提现" in content
-        and any(term in content for term in WITHDRAWAL_TRACKING_TERMS)
-        and any(term in content for term in WITHDRAWAL_PERSONAL_TERMS)
+        is_withdrawal
+        and (has_platform_hold or (has_status_query and has_personal_context))
         and not any(term in content for term in WITHDRAWAL_KNOWLEDGE_TERMS)
     )
 
@@ -166,18 +155,6 @@ class MockDepositService:
         txid: str,
     ) -> DepositRecord | None:
         return self._records.get(user_id, {}).get(txid.upper())
-
-
-def extract_deposit_txid(content: str) -> str | None:
-    match = DEPOSIT_TXID_RE.search(content)
-    return match.group(0).upper() if match else None
-
-
-def extract_entities(content: str) -> ExtractedEntities:
-    return ExtractedEntities(
-        order_id=extract_withdrawal_order_id(content),
-        txid=extract_deposit_txid(content),
-    )
 
 
 MOCK_WITHDRAWAL_SERVICE: Final = MockWithdrawalService()

@@ -10,18 +10,21 @@ export interface SourceSnapshot {
 
 export type NextActionType =
   | "provide_withdrawal_order_id"
+  | "provide_withdrawal_review_details"
   | "provide_deposit_txid"
   | "provide_deposit_followup_details"
   | "clarify_problem";
 
 export type ExpectedInput =
   | "withdrawal_order_id"
+  | "withdrawal_review_details"
   | "deposit_txid"
   | "deposit_followup_details"
   | "problem_description";
 
 export type ConversationState =
   | "awaiting_withdrawal_order_id"
+  | "awaiting_withdrawal_review_details"
   | "awaiting_deposit_txid"
   | "awaiting_deposit_followup_details"
   | "awaiting_problem_description"

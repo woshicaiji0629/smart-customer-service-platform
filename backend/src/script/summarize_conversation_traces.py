@@ -16,6 +16,8 @@ DEFAULT_SAMPLE_HANDLING_RESULTS = (
     "unknown",
     "manual_fallback_candidate",
     "deposit_followup_received",
+    "business_withdrawal_pending_review",
+    "withdrawal_onchain_transparent",
 )
 
 

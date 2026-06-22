@@ -21,6 +21,30 @@
       "expected_missing_fields": ["order_id"]
     },
     {
+      "id": "withdrawal_platform_risk_hold",
+      "query": "提现被风控卡住了",
+      "expected_route": "business_query",
+      "expected_category": "withdrawal",
+      "expected_intent": "missing_arrival",
+      "expected_missing_fields": ["order_id"]
+    },
+    {
+      "id": "withdrawal_onchain_completed_not_arrived",
+      "query": "提现完成但钱包没到账怎么办？",
+      "expected_route": "knowledge_rag",
+      "expected_category": "withdrawal",
+      "expected_intent": "onchain_status",
+      "expected_missing_fields": []
+    },
+    {
+      "id": "withdrawal_broadcast_not_arrived",
+      "query": "提现已广播但目标钱包未到账",
+      "expected_route": "knowledge_rag",
+      "expected_category": "withdrawal",
+      "expected_intent": "onchain_status",
+      "expected_missing_fields": []
+    },
+    {
       "id": "withdrawal_fee",
       "query": "提现手续费是怎么计算的？",
       "expected_route": "knowledge_rag",
@@ -435,9 +459,10 @@
     {
       "id": "frontend_withdrawal_not_arrived",
       "query": "提现完成但钱包没到账怎么办？",
-      "expected_route": "business_query",
+      "expected_route": "knowledge_rag",
       "expected_category": "withdrawal",
-      "expected_intent": "missing_arrival"
+      "expected_intent": "onchain_status",
+      "expected_missing_fields": []
     },
     {
       "id": "frontend_deposit_not_arrived",

@@ -37,17 +37,20 @@ class FakeOpsRepository:
         assert end == UPDATED_AT
         assert limit == 5
         return TraceSummary(
-            total_turns=3,
+            total_turns=5,
             by_intent_source=[
-                TraceCount(key="rule", count=2),
+                TraceCount(key="rule", count=4),
                 TraceCount(key="fallback", count=1),
             ],
             by_route=[
-                TraceCount(key="knowledge_rag", count=2),
+                TraceCount(key="business_query", count=1),
+                TraceCount(key="knowledge_rag", count=3),
                 TraceCount(key="unknown", count=1),
             ],
             by_handling_result=[
                 TraceCount(key="rag_answer", count=2),
+                TraceCount(key="business_withdrawal_pending_review", count=1),
+                TraceCount(key="withdrawal_onchain_transparent", count=1),
                 TraceCount(key="unknown", count=1),
             ],
             top_breakdowns=[
@@ -58,6 +61,22 @@ class FakeOpsRepository:
                     handling_result="rag_answer",
                     intent_source="rule",
                     count=2,
+                ),
+                TraceBreakdown(
+                    route="business_query",
+                    category="withdrawal",
+                    intent="status_query",
+                    handling_result="business_withdrawal_pending_review",
+                    intent_source="rule",
+                    count=1,
+                ),
+                TraceBreakdown(
+                    route="knowledge_rag",
+                    category="withdrawal",
+                    intent="onchain_status",
+                    handling_result="withdrawal_onchain_transparent",
+                    intent_source="rule",
+                    count=1,
                 )
             ],
         )
@@ -82,17 +101,20 @@ def test_ops_api_returns_conversation_trace_summary() -> None:
     assert response.json() == {
         "start_ts": int(CREATED_AT.timestamp()),
         "end_ts": int(UPDATED_AT.timestamp()),
-        "total_turns": 3,
+        "total_turns": 5,
         "by_intent_source": [
-            {"key": "rule", "count": 2},
+            {"key": "rule", "count": 4},
             {"key": "fallback", "count": 1},
         ],
         "by_route": [
-            {"key": "knowledge_rag", "count": 2},
+            {"key": "business_query", "count": 1},
+            {"key": "knowledge_rag", "count": 3},
             {"key": "unknown", "count": 1},
         ],
         "by_handling_result": [
             {"key": "rag_answer", "count": 2},
+            {"key": "business_withdrawal_pending_review", "count": 1},
+            {"key": "withdrawal_onchain_transparent", "count": 1},
             {"key": "unknown", "count": 1},
         ],
         "top_breakdowns": [
@@ -103,6 +125,22 @@ def test_ops_api_returns_conversation_trace_summary() -> None:
                 "handling_result": "rag_answer",
                 "intent_source": "rule",
                 "count": 2,
+            },
+            {
+                "route": "business_query",
+                "category": "withdrawal",
+                "intent": "status_query",
+                "handling_result": "business_withdrawal_pending_review",
+                "intent_source": "rule",
+                "count": 1,
+            },
+            {
+                "route": "knowledge_rag",
+                "category": "withdrawal",
+                "intent": "onchain_status",
+                "handling_result": "withdrawal_onchain_transparent",
+                "intent_source": "rule",
+                "count": 1,
             }
         ],
     }
@@ -224,9 +262,11 @@ def test_trace_sample_output_can_render_intent_case_draft() -> None:
     }
 
 
-def test_trace_sample_defaults_include_deposit_followup_received() -> None:
+def test_trace_sample_defaults_include_review_targets() -> None:
     assert DEFAULT_SAMPLE_HANDLING_RESULTS == (
         "unknown",
         "manual_fallback_candidate",
         "deposit_followup_received",
+        "business_withdrawal_pending_review",
+        "withdrawal_onchain_transparent",
     )

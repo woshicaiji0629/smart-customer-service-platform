@@ -5,9 +5,6 @@ from customer_service.auth.session import AuthenticatedUser
 from customer_service.business.service import (
     MOCK_DEPOSIT_SERVICE,
     MOCK_WITHDRAWAL_SERVICE,
-    extract_deposit_txid,
-    extract_entities,
-    extract_withdrawal_order_id,
     is_withdrawal_tracking_query,
 )
 from customer_service.main import app
@@ -107,39 +104,12 @@ def test_mock_deposit_service_normalizes_txid_case() -> None:
     assert record.txid == "TX-10001"
 
 
-def test_extract_withdrawal_order_id_requires_explicit_mock_id() -> None:
-    assert extract_withdrawal_order_id("请查询 wd-10001 的状态") == "WD-10001"
-    assert extract_withdrawal_order_id("提现为什么没到账") is None
-
-
-def test_extract_deposit_txid_requires_explicit_mock_id() -> None:
-    assert extract_deposit_txid("帮我查 tx-10001") == "TX-10001"
-    assert extract_deposit_txid("链上 hash 是 0xabc") is None
-
-
-def test_extract_entities_normalizes_supported_identifiers() -> None:
-    entities = extract_entities("请查 wd-10001 和 tx-10001")
-
-    assert entities.order_id == "WD-10001"
-    assert entities.txid == "TX-10001"
-    assert entities.to_intent_entities() == {
-        "order_id": "WD-10001",
-        "txid": "TX-10001",
-    }
-
-
-def test_extract_entities_does_not_guess_implicit_values() -> None:
-    entities = extract_entities("提现为什么没到账，链上 hash 是 0xabc")
-
-    assert entities.order_id is None
-    assert entities.txid is None
-    assert entities.to_intent_entities() == {}
-
-
 def test_withdrawal_tracking_query_requires_withdrawal_and_status_term() -> None:
-    assert is_withdrawal_tracking_query("提现完成但钱包没到账怎么办？") is True
     assert is_withdrawal_tracking_query("帮我查询提现进度") is True
     assert is_withdrawal_tracking_query("我的提现还在处理中") is True
+    assert is_withdrawal_tracking_query("提现被风控卡住了") is True
+    assert is_withdrawal_tracking_query("提现审核不放行") is True
+    assert is_withdrawal_tracking_query("提现完成但钱包没到账怎么办？") is False
     assert is_withdrawal_tracking_query("提现手续费是多少？") is False
     assert is_withdrawal_tracking_query("提现失败一般是什么原因？") is False
     assert is_withdrawal_tracking_query("帮我转人工处理提现失败的问题") is False

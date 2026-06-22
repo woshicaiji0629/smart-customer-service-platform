@@ -17,7 +17,6 @@ from customer_service.business.service import (
     MOCK_DEPOSIT_SERVICE,
     WithdrawalLookup,
     WithdrawalRecord,
-    extract_entities,
 )
 from customer_service.conversations.repository import (
     ConversationCursor,
@@ -29,6 +28,7 @@ from customer_service.conversations.repository import (
     ConversationTurn,
 )
 from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage, RagService
+from customer_service.entities.service import extract_entities
 from customer_service.intents.service import (
     IntentDecision,
     IntentHistoryMessage,
@@ -67,6 +67,12 @@ HUMAN_REQUEST_FALLBACK_PROMPT = (
     "我会先尝试自动处理，无法处理的情况会进入兜底统计。"
 )
 OUT_OF_SCOPE_ANSWER = "我目前只能处理交易所账户、交易和平台使用相关的问题。"
+WITHDRAWAL_ONCHAIN_TRANSPARENT_ANSWER = (
+    "如果平台侧提现订单已完成、已广播或已上链，链上状态通常是透明的。"
+    "请通过提现 TxID、区块浏览器、目标地址和网络自行核对链上进度及接收方入账规则。"
+    "平台客服主要能确认平台侧是否已经放行；如果订单仍显示审核中、处理中、"
+    "风控限制或不放行，请提供提现订单号，我可以帮你查询平台侧状态。"
+)
 INACTIVE_CONVERSATION_NOTICE = (
     "由于你超过 5 分钟未回复，之前的问题已自动关闭。"
     "我们将按新的问题重新处理。"
@@ -231,6 +237,14 @@ class ConversationService:
         decision: IntentDecision,
         history: list[RagHistoryMessage],
     ) -> IntentAnswer:
+        if decision.category == "withdrawal" and decision.intent == "onchain_status":
+            return IntentAnswer(
+                answer=RagAnswer(
+                    answer=WITHDRAWAL_ONCHAIN_TRANSPARENT_ANSWER,
+                    sources=[],
+                ),
+                handling_result="withdrawal_onchain_transparent",
+            )
         if decision.route == "business_query" and decision.category == "withdrawal":
             order_id = _task_entity(
                 decision,
@@ -240,6 +254,18 @@ class ConversationService:
             if not order_id:
                 return _missing_task_answer(WITHDRAWAL_STATUS_TASK)
             withdrawal = self._withdrawal_service.get_withdrawal(user_id, order_id)
+            if withdrawal is not None and withdrawal.status == "pending":
+                return IntentAnswer(
+                    answer=RagAnswer(
+                        answer=_withdrawal_answer(order_id, withdrawal),
+                        sources=[],
+                    ),
+                    handling_result="business_withdrawal_pending_review",
+                    next_action=_next_action(
+                        "provide_withdrawal_review_details",
+                        manual_fallback_candidate=True,
+                    ),
+                )
             return IntentAnswer(
                 answer=RagAnswer(
                     answer=_withdrawal_answer(order_id, withdrawal),
@@ -500,18 +526,25 @@ def _next_action(
 ) -> dict[str, object]:
     expected_input_by_type = {
         "provide_withdrawal_order_id": "withdrawal_order_id",
+        "provide_withdrawal_review_details": "withdrawal_review_details",
         "provide_deposit_txid": "deposit_txid",
         "provide_deposit_followup_details": "deposit_followup_details",
         "clarify_problem": "problem_description",
     }
     missing_fields_by_type = {
         "provide_withdrawal_order_id": ["order_id"],
+        "provide_withdrawal_review_details": ["page_hint"],
         "provide_deposit_txid": ["txid"],
         "provide_deposit_followup_details": DEPOSIT_FOLLOWUP_FIELDS,
         "clarify_problem": ["problem_description"],
     }
     state_by_type = {
         "provide_withdrawal_order_id": "awaiting_withdrawal_order_id",
+        "provide_withdrawal_review_details": (
+            "manual_fallback_candidate"
+            if manual_fallback_candidate
+            else "awaiting_withdrawal_review_details"
+        ),
         "provide_deposit_txid": "awaiting_deposit_txid",
         "provide_deposit_followup_details": "awaiting_deposit_followup_details",
         "clarify_problem": (
@@ -550,6 +583,14 @@ def _withdrawal_answer(
 ) -> str:
     if withdrawal is None:
         return f"未找到当前用户的提现订单 {order_id}。"
+    if withdrawal.status == "pending":
+        return (
+            f"Mock 查询结果：提现订单 {withdrawal.order_id}，"
+            f"状态 {withdrawal.status}，数量 {withdrawal.size} {withdrawal.coin}，"
+            f"网络 {withdrawal.chain}，更新时间 {withdrawal.updated_at}。"
+            "该订单仍在平台侧处理中，可能涉及审核、风控或合规检查；"
+            "具体原因以页面提示或平台审核结果为准。"
+        )
     return (
         f"Mock 查询结果：提现订单 {withdrawal.order_id}，"
         f"状态 {withdrawal.status}，数量 {withdrawal.size} {withdrawal.coin}，"

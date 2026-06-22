@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from customer_service.auth.api import get_current_user
 from customer_service.auth.session import AuthenticatedUser
-from customer_service.business.service import MOCK_WITHDRAWAL_SERVICE
+from customer_service.business.service import MOCK_WITHDRAWAL_SERVICE, WithdrawalRecord
 from customer_service.conversations.api import (
     _decode_cursor,
     _encode_cursor,
@@ -632,7 +632,7 @@ def test_conversation_service_routes_order_id_to_business_query() -> None:
     assert repository.traces[0]["handling_result"] == "business_withdrawal_found"
 
 
-def test_conversation_service_requests_order_id_for_tracking_query() -> None:
+def test_conversation_service_requests_order_id_for_platform_hold_query() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
         repository=repository,  # type: ignore[arg-type]
@@ -646,7 +646,7 @@ def test_conversation_service_requests_order_id_for_tracking_query() -> None:
         service.send_message(
             USER_ID,
             CONVERSATION_ID,
-            "提现完成但钱包没到账怎么办？",
+            "提现被风控卡住了",
         )
     )
 
@@ -664,6 +664,91 @@ def test_conversation_service_requests_order_id_for_tracking_query() -> None:
         "expected_input": "withdrawal_order_id",
         "missing_fields": ["order_id"],
         "manual_fallback_candidate": False,
+    }
+
+
+def test_conversation_service_answers_completed_withdrawal_as_onchain_transparent() -> None:
+    repository = FakeConversationRepository()
+    rag_service = FakeRagService()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=rag_service,  # type: ignore[arg-type]
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
+    )
+
+    turn = asyncio.run(
+        service.send_message(
+            USER_ID,
+            CONVERSATION_ID,
+            "提现完成但钱包没到账怎么办？",
+        )
+    )
+
+    assert rag_service.question is None
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "如果平台侧提现订单已完成、已广播或已上链，链上状态通常是透明的。"
+        "请通过提现 TxID、区块浏览器、目标地址和网络自行核对链上进度及接收方入账规则。"
+        "平台客服主要能确认平台侧是否已经放行；如果订单仍显示审核中、处理中、"
+        "风控限制或不放行，请提供提现订单号，我可以帮你查询平台侧状态。"
+    )
+    assert repository.saved["assistant_sources"] == []
+    assert repository.traces[0]["route"] == "knowledge_rag"
+    assert repository.traces[0]["category"] == "withdrawal"
+    assert repository.traces[0]["intent"] == "onchain_status"
+    assert repository.traces[0]["handling_result"] == "withdrawal_onchain_transparent"
+    assert turn.next_action is None
+
+
+def test_conversation_service_reports_pending_withdrawal_as_platform_processing() -> None:
+    class PendingWithdrawalService:
+        def get_withdrawal(
+            self,
+            user_id: str,
+            order_id: str,
+        ) -> WithdrawalRecord | None:
+            if user_id != USER_ID or order_id.upper() != "WD-20001":
+                return None
+            return WithdrawalRecord(
+                order_id="WD-20001",
+                coin="USDT",
+                size="50.00",
+                status="pending",
+                chain="TRC20",
+                updated_at="2026-06-20T13:30:00+08:00",
+            )
+
+    repository = FakeConversationRepository()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=PendingWithdrawalService(),
+        intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
+    )
+
+    turn = asyncio.run(
+        service.send_message(USER_ID, CONVERSATION_ID, "查询 WD-20001")
+    )
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "Mock 查询结果：提现订单 WD-20001，状态 pending，数量 50.00 USDT，"
+        "网络 TRC20，更新时间 2026-06-20T13:30:00+08:00。"
+        "该订单仍在平台侧处理中，可能涉及审核、风控或合规检查；"
+        "具体原因以页面提示或平台审核结果为准。"
+    )
+    assert repository.traces[0]["handling_result"] == (
+        "business_withdrawal_pending_review"
+    )
+    assert turn.next_action == {
+        "type": "provide_withdrawal_review_details",
+        "state": "manual_fallback_candidate",
+        "expected_input": "withdrawal_review_details",
+        "missing_fields": ["page_hint"],
+        "manual_fallback_candidate": True,
     }
 
 
@@ -707,9 +792,15 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
         intent_service=IntentService(None),
     )
 
-    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "充值需要多少个区块确认"))
+    asyncio.run(
+        service.send_message(
+            USER_ID,
+            CONVERSATION_ID,
+            "USDT 走 TRC20，今天 14:30 充值需要多少个区块确认",
+        )
+    )
 
-    assert rag_service.question == "充值需要多少个区块确认"
+    assert rag_service.question == "USDT 走 TRC20，今天 14:30 充值需要多少个区块确认"
     assert repository.saved is not None
     assert repository.saved["assistant_sources"] == [
         {
@@ -721,6 +812,11 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
     assert repository.traces[0]["route"] == "knowledge_rag"
     assert repository.traces[0]["category"] == "deposit"
     assert repository.traces[0]["intent"] == "rule"
+    assert repository.traces[0]["entities"] == {
+        "coin": "USDT",
+        "network": "TRC20",
+        "time_hint": "今天 14:30",
+    }
     assert repository.traces[0]["handling_result"] == "rag_answer"
 
 

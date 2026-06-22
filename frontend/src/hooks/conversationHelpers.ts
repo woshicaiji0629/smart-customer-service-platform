@@ -40,6 +40,11 @@ const DEPOSIT_FOLLOWUP_GUIDANCE: ComposerGuidance = {
   guides: ["例如 USDT / TRC20 / 今天 14:30", "链上成功但未到账请说明页面提示"],
 };
 
+const WITHDRAWAL_REVIEW_GUIDANCE: ComposerGuidance = {
+  placeholder: "补充页面提示、审核状态或限制说明",
+  guides: ["请按页面原文描述提示", "不要发送密码或验证码"],
+};
+
 export function titleFromQuestion(question: string): string {
   const normalized = question.trim().replace(/\s+/g, " ");
   return normalized.length > TITLE_LENGTH
@@ -76,9 +81,21 @@ export function composerGuidanceFromMessages(
     return DEPOSIT_FOLLOWUP_GUIDANCE;
   }
   if (
+    lastAssistantMessage.next_action?.state ===
+    "awaiting_withdrawal_review_details"
+  ) {
+    return WITHDRAWAL_REVIEW_GUIDANCE;
+  }
+  if (
     lastAssistantMessage.next_action?.expected_input === "withdrawal_order_id"
   ) {
     return WITHDRAWAL_ORDER_GUIDANCE;
+  }
+  if (
+    lastAssistantMessage.next_action?.expected_input ===
+    "withdrawal_review_details"
+  ) {
+    return WITHDRAWAL_REVIEW_GUIDANCE;
   }
   if (lastAssistantMessage.next_action?.expected_input === "deposit_txid") {
     return DEPOSIT_TXID_GUIDANCE;
@@ -88,6 +105,13 @@ export function composerGuidanceFromMessages(
     "deposit_followup_details"
   ) {
     return DEPOSIT_FOLLOWUP_GUIDANCE;
+  }
+  if (
+    lastAssistantMessage.next_action?.type ===
+      "provide_withdrawal_review_details" ||
+    lastAssistantMessage.next_action?.missing_fields.includes("page_hint")
+  ) {
+    return WITHDRAWAL_REVIEW_GUIDANCE;
   }
   if (lastAssistantMessage.content.includes(WITHDRAWAL_ORDER_PROMPT)) {
     return WITHDRAWAL_ORDER_GUIDANCE;

@@ -112,4 +112,22 @@ describe("composerGuidanceFromMessages", () => {
       "链上成功但未到账请说明页面提示",
     ]);
   });
+
+  it("提现 pending 进入人工兜底候选时提示补充页面信息", () => {
+    const guidance = composerGuidanceFromMessages([
+      message("assistant", "该订单仍在平台侧处理中。", {
+        type: "provide_withdrawal_review_details",
+        state: "manual_fallback_candidate",
+        expected_input: "withdrawal_review_details",
+        missing_fields: ["page_hint"],
+        manual_fallback_candidate: true,
+      }),
+    ]);
+
+    expect(guidance.placeholder).toBe("补充页面提示、审核状态或限制说明");
+    expect(guidance.guides).toEqual([
+      "请按页面原文描述提示",
+      "不要发送密码或验证码",
+    ]);
+  });
 });
