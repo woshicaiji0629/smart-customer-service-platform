@@ -2,11 +2,33 @@ import { type KeyboardEvent, type SubmitEvent, useEffect, useRef } from "react";
 
 import type { AuthenticatedUser } from "../api/auth";
 import type { Message } from "../api/conversations";
+import { composerGuidanceFromMessages } from "../hooks/conversationHelpers";
 
 const SUGGESTED_QUESTIONS = [
-  "提现完成但钱包没到账怎么办？",
-  "如何查找我的 TxID？",
-  "企业认证需要准备哪些资料？",
+  {
+    label: "提现未到账",
+    question: "提现完成但钱包没到账怎么办？",
+  },
+  {
+    label: "充值未到账",
+    question: "充值一直没到账，我应该怎么处理？",
+  },
+  {
+    label: "身份认证失败",
+    question: "身份认证失败一般是什么原因？",
+  },
+  {
+    label: "账户安全",
+    question: "发现陌生登录，我应该怎么保护账户？",
+  },
+  {
+    label: "查提现订单",
+    question: "查询 WD-10001",
+  },
+  {
+    label: "查充值 TxID",
+    question: "查询 TX-10001",
+  },
 ];
 
 interface ChatWorkspaceProps {
@@ -19,6 +41,7 @@ interface ChatWorkspaceProps {
   isSending: boolean;
   onInputChange: (value: string) => void;
   onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
+  onSuggestedQuestion: (question: string) => void;
   onLogout: () => void;
 }
 
@@ -32,9 +55,11 @@ export function ChatWorkspace({
   isSending,
   onInputChange,
   onSubmit,
+  onSuggestedQuestion,
   onLogout,
 }: ChatWorkspaceProps) {
   const endRef = useRef<HTMLDivElement>(null);
+  const composerGuidance = composerGuidanceFromMessages(messages);
 
   // 消息或发送状态变化后滚动到底部，保持最新消息和加载提示可见。
   useEffect(() => {
@@ -79,16 +104,18 @@ export function ChatWorkspace({
             <p className="welcome-icon" aria-hidden="true">
               24/7
             </p>
-            <h2>有什么可以帮你？</h2>
-            <p>我会根据官方帮助资料，为你查找答案并附上来源。</p>
+            <h2>先用智能客服解决问题</h2>
+            <p>选择高频场景或直接输入订单号、TxID，我会优先自动查询和匹配官方资料。</p>
             <div className="suggestions" aria-label="推荐问题">
-              {SUGGESTED_QUESTIONS.map((question) => (
+              {SUGGESTED_QUESTIONS.map((item) => (
                 <button
-                  key={question}
+                  key={item.question}
                   type="button"
-                  onClick={() => onInputChange(question)}
+                  disabled={isLoadingHistory || isSending}
+                  onClick={() => onSuggestedQuestion(item.question)}
                 >
-                  {question}
+                  <span>{item.label}</span>
+                  <strong>{item.question}</strong>
                 </button>
               ))}
             </div>
@@ -139,10 +166,15 @@ export function ChatWorkspace({
 
       <footer className="composer-area">
         {error && <p className="error-message">{error}</p>}
+        <div className="input-guides" aria-label="提问提示">
+          {composerGuidance.guides.map((guide) => (
+            <span key={guide}>{guide}</span>
+          ))}
+        </div>
         <form className="composer" onSubmit={onSubmit}>
           <textarea
             aria-label="输入问题"
-            placeholder="输入你的问题…"
+            placeholder={composerGuidance.placeholder}
             rows={1}
             maxLength={4000}
             value={input}

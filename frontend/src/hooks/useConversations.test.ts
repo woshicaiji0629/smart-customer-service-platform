@@ -61,4 +61,50 @@ describe("useConversations", () => {
     expect(result.current.error).toBe("发送失败");
     expect(result.current.isSending).toBe(false);
   });
+
+  it("可以直接发送快捷问题而不写入输入框", async () => {
+    vi.mocked(listConversations).mockResolvedValue({ items: [], next_cursor: null });
+    vi.mocked(createConversation).mockResolvedValue({
+      id: "conversation-1",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    vi.mocked(sendMessage).mockResolvedValue({
+      user_message: {
+        id: 1,
+        conversation_id: "conversation-1",
+        role: "user",
+        content: "提现完成但钱包没到账怎么办？",
+        sources: [],
+        created_at: "2026-01-01T00:00:01Z",
+      },
+      assistant_message: {
+        id: 2,
+        conversation_id: "conversation-1",
+        role: "assistant",
+        content: "请提供提现订单号。",
+        sources: [],
+        created_at: "2026-01-01T00:00:02Z",
+      },
+    });
+    vi.mocked(getConversation).mockRejectedValue(new Error("不应调用"));
+
+    const { result } = renderHook(() => useConversations("10001"));
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false));
+
+    await act(() =>
+      result.current.submitQuestion("提现完成但钱包没到账怎么办？"),
+    );
+
+    expect(createConversation).toHaveBeenCalledOnce();
+    expect(sendMessage).toHaveBeenCalledWith(
+      "conversation-1",
+      "提现完成但钱包没到账怎么办？",
+    );
+    expect(result.current.input).toBe("");
+    expect(result.current.messages.map((message) => message.content)).toEqual([
+      "提现完成但钱包没到账怎么办？",
+      "请提供提现订单号。",
+    ]);
+  });
 });

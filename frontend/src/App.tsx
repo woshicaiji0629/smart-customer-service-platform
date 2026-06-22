@@ -68,6 +68,10 @@ export function App() {
           withdrawal.clearError();
           void conversations.submit(event);
         }}
+        onSuggestedQuestion={(question) => {
+          withdrawal.clearError();
+          void conversations.submitQuestion(question);
+        }}
         onLogout={() => void auth.logout()}
       />
     </div>

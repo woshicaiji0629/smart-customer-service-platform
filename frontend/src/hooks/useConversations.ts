@@ -102,9 +102,8 @@ export function useConversations(userId: string | null) {
     history.mutations.setError(getErrorMessage(requestError));
   }
 
-  async function submit(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const question = input.trim();
+  async function submitQuestion(rawQuestion: string) {
+    const question = rawQuestion.trim();
     if (!question || isSending) {
       return;
     }
@@ -145,6 +144,11 @@ export function useConversations(userId: string | null) {
     }
   }
 
+  async function submit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitQuestion(input);
+  }
+
   return {
     conversationId: history.conversationId,
     conversations: history.conversations,
@@ -162,5 +166,6 @@ export function useConversations(userId: string | null) {
     loadMore: history.loadMore,
     selectConversation,
     submit,
+    submitQuestion,
   };
 }

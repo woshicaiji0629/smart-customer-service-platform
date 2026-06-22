@@ -8,6 +8,22 @@ export interface SourceSnapshot {
   source_url: string;
 }
 
+export type NextActionType =
+  | "provide_withdrawal_order_id"
+  | "provide_deposit_txid"
+  | "clarify_problem";
+
+export type ExpectedInput =
+  | "withdrawal_order_id"
+  | "deposit_txid"
+  | "problem_description";
+
+export interface NextAction {
+  type: NextActionType;
+  expected_input: ExpectedInput;
+  manual_fallback_candidate: boolean;
+}
+
 export interface Message {
   id: number;
   conversation_id: string;
@@ -15,6 +31,7 @@ export interface Message {
   content: string;
   sources: SourceSnapshot[];
   created_at: string;
+  next_action?: NextAction | null;
 }
 
 export interface Conversation {

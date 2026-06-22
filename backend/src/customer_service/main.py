@@ -45,6 +45,8 @@ from customer_service.model_usage.repository import (
     DatabaseModelUsageSink,
     ModelUsageRepository,
 )
+from customer_service.ops.api import router as ops_router
+from customer_service.ops.repository import OpsRepository
 
 
 LOCAL_FRONTEND_ORIGINS = [
@@ -59,6 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.rag_service = None
     app.state.conversation_service = None
     app.state.model_usage_repository = None
+    app.state.ops_repository = None
     app.state.session_store = None
     app.state.session_ttl_seconds = int(
         os.getenv("SESSION_TTL_SECONDS", str(DEFAULT_SESSION_TTL_SECONDS))
@@ -86,6 +89,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
             conversation_repository = ConversationRepository(database_url)
             stack.push_async_callback(conversation_repository.close)
+            ops_repository = OpsRepository(database_url)
+            stack.push_async_callback(ops_repository.close)
+            app.state.ops_repository = ops_repository
             model_usage_repository = ModelUsageRepository(database_url)
             stack.push_async_callback(model_usage_repository.close)
             app.state.model_usage_repository = model_usage_repository
@@ -150,6 +156,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.rag_service = None
         app.state.conversation_service = None
         app.state.model_usage_repository = None
+        app.state.ops_repository = None
         app.state.session_store = None
 
 
@@ -165,6 +172,7 @@ app.include_router(auth_router)
 app.include_router(business_router)
 app.include_router(conversation_router)
 app.include_router(model_usage_router)
+app.include_router(ops_router)
 
 
 def _env_flag(name: str, *, default: bool = False) -> bool:

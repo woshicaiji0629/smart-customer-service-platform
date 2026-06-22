@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+import re
 from uuid import UUID
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -40,19 +41,29 @@ MAX_HISTORY_MESSAGES = 6
 INACTIVE_CONVERSATION_CLOSE_AFTER_SECONDS = 300
 DEFAULT_CONVERSATION_LIST_LIMIT = 50
 MAX_CONVERSATION_LIST_LIMIT = 100
+MANUAL_FALLBACK_AFTER_ATTEMPTS = 2
 WITHDRAWAL_ORDER_ID_PROMPT = (
     "请提供提现订单号，例如 WD-10001，我可以帮你查询处理状态。"
 )
 DEPOSIT_TXID_PROMPT = "请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。"
 UNKNOWN_INTENT_PROMPT = "请补充说明你遇到的具体问题、操作步骤或页面提示。"
+UNKNOWN_INTENT_FALLBACK_PROMPT = (
+    "我还无法判断具体问题。请从提现、充值、身份认证、账户安全中选择一个方向，"
+    "或直接发送订单号/TxID；本次未解决情况已记录用于后续兜底统计。"
+)
 HUMAN_REQUEST_PROMPT = (
     "请先描述需要解决的具体问题，我会优先尝试自动查询或提供处理方案。"
+)
+HUMAN_REQUEST_FALLBACK_PROMPT = (
+    "我已记录你需要人工兜底的诉求。请继续补充具体问题、订单号或页面提示，"
+    "我会先尝试自动处理，无法处理的情况会进入兜底统计。"
 )
 OUT_OF_SCOPE_ANSWER = "我目前只能处理交易所账户、交易和平台使用相关的问题。"
 INACTIVE_CONVERSATION_NOTICE = (
     "由于你超过 5 分钟未回复，之前的问题已自动关闭。"
     "我们将按新的问题重新处理。"
 )
+DIGITS_ONLY_RE = re.compile(r"^\d+$")
 logger = logging.getLogger(__name__)
 
 
@@ -60,6 +71,7 @@ logger = logging.getLogger(__name__)
 class IntentAnswer:
     answer: RagAnswer
     handling_result: str
+    next_action: dict[str, object] | None = None
 
 
 class ConversationService:
@@ -130,7 +142,11 @@ class ConversationService:
             normalized_content,
             history=intent_history,
         )
-        decision = _apply_pending_intent(decision, active_messages)
+        decision, normalized_content = _apply_pending_intent(
+            decision,
+            active_messages,
+            normalized_content,
+        )
         rag_history = [
             RagHistoryMessage(role=message.role, content=message.content)
             for message in active_messages
@@ -170,7 +186,7 @@ class ConversationService:
             handling_result=intent_answer.handling_result,
             is_inactive_reset=is_inactive,
         )
-        return turn
+        return replace(turn, next_action=intent_answer.next_action)
 
     async def _answer_for_intent(
         self,
@@ -185,6 +201,7 @@ class ConversationService:
                 return IntentAnswer(
                     answer=RagAnswer(answer=WITHDRAWAL_ORDER_ID_PROMPT, sources=[]),
                     handling_result="missing_withdrawal_order_id",
+                    next_action=_next_action("provide_withdrawal_order_id"),
                 )
             withdrawal = self._withdrawal_service.get_withdrawal(user_id, order_id)
             return IntentAnswer(
@@ -206,6 +223,7 @@ class ConversationService:
                 return IntentAnswer(
                     answer=RagAnswer(answer=DEPOSIT_TXID_PROMPT, sources=[]),
                     handling_result="missing_deposit_txid",
+                    next_action=_next_action("provide_deposit_txid"),
                 )
             deposit = self._deposit_service.get_deposit(user_id, txid)
             return IntentAnswer(
@@ -222,14 +240,44 @@ class ConversationService:
                 handling_result="out_of_scope",
             )
         if decision.route == "human_request":
+            previous_human_requests = _count_recent_assistant_replies(
+                history,
+                HUMAN_REQUEST_PROMPT,
+                HUMAN_REQUEST_FALLBACK_PROMPT,
+            )
+            if previous_human_requests >= MANUAL_FALLBACK_AFTER_ATTEMPTS - 1:
+                return IntentAnswer(
+                    answer=RagAnswer(answer=HUMAN_REQUEST_FALLBACK_PROMPT, sources=[]),
+                    handling_result="manual_fallback_candidate",
+                    next_action=_next_action(
+                        "clarify_problem",
+                        manual_fallback_candidate=True,
+                    ),
+                )
             return IntentAnswer(
                 answer=RagAnswer(answer=HUMAN_REQUEST_PROMPT, sources=[]),
                 handling_result="human_request",
+                next_action=_next_action("clarify_problem"),
             )
         if decision.route == "unknown":
+            previous_unknowns = _count_recent_assistant_replies(
+                history,
+                UNKNOWN_INTENT_PROMPT,
+                UNKNOWN_INTENT_FALLBACK_PROMPT,
+            )
+            if previous_unknowns >= MANUAL_FALLBACK_AFTER_ATTEMPTS - 1:
+                return IntentAnswer(
+                    answer=RagAnswer(answer=UNKNOWN_INTENT_FALLBACK_PROMPT, sources=[]),
+                    handling_result="manual_fallback_candidate",
+                    next_action=_next_action(
+                        "clarify_problem",
+                        manual_fallback_candidate=True,
+                    ),
+                )
             return IntentAnswer(
                 answer=RagAnswer(answer=UNKNOWN_INTENT_PROMPT, sources=[]),
                 handling_result="unknown",
+                next_action=_next_action("clarify_problem"),
             )
         if self._rag_service is None:
             raise RagUnavailableError
@@ -257,6 +305,7 @@ class ConversationService:
                 route=decision.route,
                 category=decision.category,
                 intent=decision.intent,
+                intent_source=decision.source,
                 confidence=decision.confidence,
                 entities=decision.entities,
                 missing_fields=decision.missing_fields,
@@ -294,29 +343,47 @@ def _is_inactive_context(
 def _apply_pending_intent(
     decision: IntentDecision,
     history: list[MessageRecord],
-) -> IntentDecision:
+    content: str,
+) -> tuple[IntentDecision, str]:
     if decision.route != "unknown":
-        return decision
+        return decision, content
     pending_category = _pending_category_from_history(history)
     if pending_category == "deposit":
+        normalized_content = _prefixed_pending_identifier(content, prefix="TX")
+        entities = {"txid": normalized_content} if normalized_content != content else {}
+        missing_fields: tuple[str, ...] = () if entities else ("txid",)
         return IntentDecision(
             route="business_query",
             category="deposit",
             intent="status_query",
             confidence=1.0,
-            entities={},
-            missing_fields=("txid",),
-        )
+            entities=entities,
+            missing_fields=missing_fields,
+            source="fallback",
+        ), content
     if pending_category == "withdrawal":
+        normalized_content = _prefixed_pending_identifier(content, prefix="WD")
+        entities = (
+            {"order_id": normalized_content} if normalized_content != content else {}
+        )
+        missing_fields = () if entities else ("order_id",)
         return IntentDecision(
             route="business_query",
             category="withdrawal",
             intent="status_query",
             confidence=1.0,
-            entities={},
-            missing_fields=("order_id",),
-        )
-    return decision
+            entities=entities,
+            missing_fields=missing_fields,
+            source="fallback",
+        ), content
+    return decision, content
+
+
+def _prefixed_pending_identifier(content: str, *, prefix: str) -> str:
+    stripped = content.strip()
+    if not DIGITS_ONLY_RE.fullmatch(stripped):
+        return content
+    return f"{prefix}-{stripped}"
 
 
 def _pending_category_from_history(history: list[MessageRecord]) -> str | None:
@@ -331,6 +398,38 @@ def _pending_category_from_history(history: list[MessageRecord]) -> str | None:
             return "withdrawal"
         return None
     return None
+
+
+def _next_action(
+    action_type: str,
+    *,
+    manual_fallback_candidate: bool = False,
+) -> dict[str, object]:
+    expected_input_by_type = {
+        "provide_withdrawal_order_id": "withdrawal_order_id",
+        "provide_deposit_txid": "deposit_txid",
+        "clarify_problem": "problem_description",
+    }
+    return {
+        "type": action_type,
+        "expected_input": expected_input_by_type[action_type],
+        "manual_fallback_candidate": manual_fallback_candidate,
+    }
+
+
+def _count_recent_assistant_replies(
+    history: list[RagHistoryMessage],
+    *contents: str,
+) -> int:
+    content_set = set(contents)
+    count = 0
+    for message in reversed(history):
+        if message.role == "user":
+            continue
+        if message.content not in content_set:
+            break
+        count += 1
+    return count
 
 
 def _withdrawal_answer(

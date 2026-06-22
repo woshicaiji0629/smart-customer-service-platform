@@ -115,8 +115,8 @@ export function ConversationSidebar({
       )}
 
       <form className="business-query" onSubmit={onWithdrawalQuery}>
-        <p className="sidebar-eyebrow">MOCK BUSINESS</p>
-        <label htmlFor="withdrawal-order">提现订单查询</label>
+        <p className="sidebar-eyebrow">QUICK CHECK</p>
+        <label htmlFor="withdrawal-order">辅助验证提现订单</label>
         <div>
           <input
             id="withdrawal-order"

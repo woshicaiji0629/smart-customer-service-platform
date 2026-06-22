@@ -299,6 +299,7 @@ a {
   margin-top: 28px;
   padding-top: 20px;
   border-top: 1px solid #31533f;
+  opacity: 0.86;
 }
 
 .business-query label {
@@ -410,8 +411,9 @@ a {
 .welcome-panel h2 {
   margin: 0;
   font-family: Georgia, "Songti SC", serif;
-  font-size: clamp(1.8rem, 5vw, 2.5rem);
+  font-size: 2.25rem;
   font-weight: 500;
+  letter-spacing: 0;
 }
 
 .welcome-panel > p:not(.welcome-icon) {
@@ -423,25 +425,50 @@ a {
 
 .suggestions {
   display: grid;
-  width: min(560px, 100%);
+  width: min(720px, 100%);
   margin-top: 36px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
 .suggestions button {
-  padding: 14px 18px;
+  display: flex;
+  min-height: 82px;
+  padding: 13px 15px;
   color: #294435;
   text-align: left;
   background: #fff;
   border: 1px solid #d9e1d9;
-  border-radius: 10px;
+  border-radius: 8px;
   cursor: pointer;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
   transition: border-color 160ms ease, transform 160ms ease;
 }
 
 .suggestions button:hover {
   border-color: #8ba894;
   transform: translateY(-1px);
+}
+
+.suggestions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
+.suggestions span {
+  color: #66716a;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.suggestions strong {
+  color: #203629;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.42;
 }
 
 .message-list {
@@ -558,6 +585,22 @@ a {
   border-top: 1px solid #d8e0d8;
 }
 
+.input-guides {
+  display: flex;
+  margin: 0 2px 10px;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.input-guides span {
+  padding: 5px 8px;
+  color: #65746a;
+  font-size: 0.72rem;
+  background: #eef3ed;
+  border: 1px solid #dbe4db;
+  border-radius: 999px;
+}
+
 .composer {
   display: flex;
   align-items: flex-end;
@@ -672,6 +715,14 @@ a {
 
   .welcome-panel {
     padding-top: 48px;
+  }
+
+  .welcome-panel h2 {
+    font-size: 1.9rem;
+  }
+
+  .suggestions {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -25,6 +25,7 @@ from sqlalchemy import (
     insert,
     or_,
     select,
+    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgreSQLUUID
@@ -87,6 +88,7 @@ conversation_turn_traces = Table(
     Column("route", String(32), nullable=False, index=True),
     Column("category", String(64), nullable=False, index=True),
     Column("intent", String(64), nullable=False, index=True),
+    Column("intent_source", String(16), nullable=False, server_default="unknown"),
     Column("confidence", Numeric(5, 4), nullable=False),
     Column("entities", JSONB, nullable=False),
     Column("missing_fields", JSONB, nullable=False),
@@ -127,6 +129,7 @@ class MessageRecord:
 class ConversationTurn:
     user_message: MessageRecord
     assistant_message: MessageRecord
+    next_action: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,6 +169,13 @@ class ConversationRepository:
                 await connection.run_sync(messages.drop, checkfirst=True)
                 await connection.run_sync(conversations.drop, checkfirst=True)
             await connection.run_sync(metadata.create_all)
+            await connection.execute(
+                text(
+                    "ALTER TABLE conversation_turn_traces "
+                    "ADD COLUMN IF NOT EXISTS intent_source "
+                    "VARCHAR(16) NOT NULL DEFAULT 'unknown'"
+                )
+            )
 
     async def create_conversation(self, user_id: str) -> ConversationRecord:
         conversation_id = uuid4()
@@ -316,6 +326,7 @@ class ConversationRepository:
         route: str,
         category: str,
         intent: str,
+        intent_source: str,
         confidence: float,
         entities: dict[str, str],
         missing_fields: tuple[str, ...],
@@ -330,6 +341,7 @@ class ConversationRepository:
             route=route,
             category=category,
             intent=intent,
+            intent_source=intent_source,
             confidence=confidence,
             entities=entities,
             missing_fields=list(missing_fields),

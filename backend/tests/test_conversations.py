@@ -263,6 +263,7 @@ def test_conversation_schema_has_expected_columns() -> None:
         "route",
         "category",
         "intent",
+        "intent_source",
         "confidence",
         "entities",
         "missing_fields",
@@ -313,6 +314,7 @@ def test_conversation_service_saves_complete_turn_after_rag() -> None:
             "route": "knowledge_rag",
             "category": "other",
             "intent": "unknown",
+            "intent_source": "model",
             "confidence": 1.0,
             "entities": {},
             "missing_fields": (),
@@ -605,6 +607,7 @@ def test_conversation_service_routes_order_id_to_business_query() -> None:
     assert repository.saved["assistant_sources"] == []
     assert repository.traces[0]["route"] == "business_query"
     assert repository.traces[0]["category"] == "withdrawal"
+    assert repository.traces[0]["intent_source"] == "rule"
     assert repository.traces[0]["entities"] == {"order_id": "WD-10001"}
     assert repository.traces[0]["handling_result"] == "business_withdrawal_found"
 
@@ -619,7 +622,7 @@ def test_conversation_service_requests_order_id_for_tracking_query() -> None:
         now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
-    asyncio.run(
+    turn = asyncio.run(
         service.send_message(
             USER_ID,
             CONVERSATION_ID,
@@ -635,6 +638,11 @@ def test_conversation_service_requests_order_id_for_tracking_query() -> None:
     assert repository.saved["assistant_sources"] == []
     assert repository.traces[0]["handling_result"] == "missing_withdrawal_order_id"
     assert repository.traces[0]["missing_fields"] == ("order_id",)
+    assert turn.next_action == {
+        "type": "provide_withdrawal_order_id",
+        "expected_input": "withdrawal_order_id",
+        "manual_fallback_candidate": False,
+    }
 
 
 def test_conversation_service_requests_txid_for_deposit_query() -> None:
@@ -644,9 +652,12 @@ def test_conversation_service_requests_txid_for_deposit_query() -> None:
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
-    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "我的充值一直没到账"))
+    turn = asyncio.run(
+        service.send_message(USER_ID, CONVERSATION_ID, "我的充值一直没到账")
+    )
 
     assert repository.saved is not None
     assert repository.saved["assistant_content"] == (
@@ -655,6 +666,11 @@ def test_conversation_service_requests_txid_for_deposit_query() -> None:
     assert repository.saved["assistant_sources"] == []
     assert repository.traces[0]["category"] == "deposit"
     assert repository.traces[0]["handling_result"] == "missing_deposit_txid"
+    assert turn.next_action == {
+        "type": "provide_deposit_txid",
+        "expected_input": "deposit_txid",
+        "manual_fallback_candidate": False,
+    }
 
 
 def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
@@ -837,6 +853,7 @@ def test_conversation_service_routes_deposit_txid_to_business_query() -> None:
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
     asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "帮我查 tx-10001"))
@@ -857,6 +874,7 @@ def test_conversation_service_does_not_expose_another_users_deposit() -> None:
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
     asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "帮我查 TX-10002"))
@@ -897,6 +915,38 @@ def test_conversation_service_keeps_pending_deposit_context() -> None:
     assert repository.saved["assistant_content"] == (
         "请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。"
     )
+    assert repository.traces[0]["intent_source"] == "fallback"
+
+
+def test_conversation_service_completes_numeric_txid_in_pending_context() -> None:
+    repository = FakeConversationRepository(
+        recent_messages=[
+            _message(
+                message_id=1,
+                role="assistant",
+                content="请提供充值 TxID，例如 TX-10001，我可以帮你查询充值处理状态。",
+                created_at=CREATED_AT,
+            )
+        ]
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "10001"))
+
+    assert repository.saved is not None
+    assert repository.saved["user_content"] == "10001"
+    assert repository.saved["assistant_content"] == (
+        "Mock 查询结果：充值 TxID TX-10001，状态 success，数量 88.00 USDT，"
+        "网络 TRC20，更新时间 2026-06-20T12:30:00+08:00。"
+    )
+    assert repository.traces[0]["entities"] == {"txid": "TX-10001"}
+    assert repository.traces[0]["handling_result"] == "business_deposit_found"
 
 
 def test_conversation_service_drops_pending_context_after_inactivity() -> None:
@@ -957,6 +1007,34 @@ def test_conversation_service_keeps_pending_withdrawal_context() -> None:
     )
 
 
+def test_conversation_service_completes_numeric_order_id_in_pending_context() -> None:
+    repository = FakeConversationRepository(
+        recent_messages=[
+            _message(
+                message_id=1,
+                role="assistant",
+                content="请提供提现订单号，例如 WD-10001，我可以帮你查询处理状态。",
+                created_at=CREATED_AT,
+            )
+        ]
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "10001"))
+
+    assert repository.saved is not None
+    assert repository.saved["user_content"] == "10001"
+    assert "提现订单 WD-10001" in str(repository.saved["assistant_content"])
+    assert repository.traces[0]["entities"] == {"order_id": "WD-10001"}
+    assert repository.traces[0]["handling_result"] == "business_withdrawal_found"
+
+
 def test_conversation_service_does_not_override_explicit_intent_with_pending_context() -> None:
     repository = FakeConversationRepository(
         recent_messages=[
@@ -975,6 +1053,7 @@ def test_conversation_service_does_not_override_explicit_intent_with_pending_con
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
     )
 
     asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "查询 WD-10001"))
@@ -1014,7 +1093,76 @@ def test_conversation_service_clarifies_unknown_intent_without_model() -> None:
         "请补充说明你遇到的具体问题、操作步骤或页面提示。"
     )
     assert repository.traces[0]["route"] == "unknown"
+    assert repository.traces[0]["intent_source"] == "fallback"
     assert repository.traces[0]["handling_result"] == "unknown"
+
+
+def test_conversation_service_marks_repeated_unknown_as_manual_fallback_candidate() -> None:
+    repository = FakeConversationRepository(
+        recent_messages=[
+            _message(message_id=1, role="user", content="这个怎么弄"),
+            _message(
+                message_id=2,
+                role="assistant",
+                content="请补充说明你遇到的具体问题、操作步骤或页面提示。",
+            ),
+        ]
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
+    )
+
+    turn = asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "还是不行"))
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "我还无法判断具体问题。请从提现、充值、身份认证、账户安全中选择一个方向，"
+        "或直接发送订单号/TxID；本次未解决情况已记录用于后续兜底统计。"
+    )
+    assert repository.traces[0]["handling_result"] == "manual_fallback_candidate"
+    assert turn.next_action == {
+        "type": "clarify_problem",
+        "expected_input": "problem_description",
+        "manual_fallback_candidate": True,
+    }
+
+
+def test_conversation_service_marks_repeated_human_request_as_manual_fallback_candidate() -> None:
+    repository = FakeConversationRepository(
+        recent_messages=[
+            _message(message_id=1, role="user", content="人工"),
+            _message(
+                message_id=2,
+                role="assistant",
+                content="请先描述需要解决的具体问题，我会优先尝试自动查询或提供处理方案。",
+            ),
+        ]
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+        now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
+    )
+
+    turn = asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "人工客服"))
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "我已记录你需要人工兜底的诉求。请继续补充具体问题、订单号或页面提示，"
+        "我会先尝试自动处理，无法处理的情况会进入兜底统计。"
+    )
+    assert repository.traces[0]["handling_result"] == "manual_fallback_candidate"
+    assert turn.next_action == {
+        "type": "clarify_problem",
+        "expected_input": "problem_description",
+        "manual_fallback_candidate": True,
+    }
 
 
 def test_conversation_service_keeps_response_when_trace_write_fails() -> None:
@@ -1113,7 +1261,15 @@ class FakeConversationService:
         assert user_id == USER_ID
         assert conversation_id == CONVERSATION_ID
         assert content == "提现没有到账"
-        return _turn()
+        return ConversationTurn(
+            user_message=_turn().user_message,
+            assistant_message=_turn().assistant_message,
+            next_action={
+                "type": "provide_withdrawal_order_id",
+                "expected_input": "withdrawal_order_id",
+                "manual_fallback_candidate": False,
+            },
+        )
 
     async def get_history(
         self,
@@ -1149,6 +1305,11 @@ def test_conversation_api_create_send_and_get_history() -> None:
     assert send_response.json()["assistant_message"]["sources"][0]["article_id"] == (
         "article-1"
     )
+    assert send_response.json()["assistant_message"]["next_action"] == {
+        "type": "provide_withdrawal_order_id",
+        "expected_input": "withdrawal_order_id",
+        "manual_fallback_candidate": False,
+    }
     assert history_response.status_code == 200
     assert [message["role"] for message in history_response.json()["messages"]] == [
         "user",

@@ -56,6 +56,12 @@ class SourceSnapshotResponse(BaseModel):
     source_url: str
 
 
+class NextActionResponse(BaseModel):
+    type: str
+    expected_input: str
+    manual_fallback_candidate: bool
+
+
 class MessageResponse(BaseModel):
     id: int
     conversation_id: UUID
@@ -63,6 +69,7 @@ class MessageResponse(BaseModel):
     content: str
     sources: list[SourceSnapshotResponse]
     created_at: datetime
+    next_action: NextActionResponse | None = None
 
 
 class ConversationResponse(BaseModel):
@@ -217,7 +224,11 @@ def _conversation_response(record: ConversationRecord) -> ConversationResponse:
     )
 
 
-def _message_response(record: MessageRecord) -> MessageResponse:
+def _message_response(
+    record: MessageRecord,
+    *,
+    next_action: dict[str, object] | None = None,
+) -> MessageResponse:
     return MessageResponse(
         id=record.message_id,
         conversation_id=record.conversation_id,
@@ -225,6 +236,9 @@ def _message_response(record: MessageRecord) -> MessageResponse:
         content=record.content,
         sources=[SourceSnapshotResponse(**source) for source in record.sources],
         created_at=record.created_at,
+        next_action=(
+            NextActionResponse(**next_action) if next_action is not None else None
+        ),
     )
 
 
@@ -283,7 +297,10 @@ def _decode_cursor(value: str) -> ConversationCursor:
 def _turn_response(turn: ConversationTurn) -> ConversationTurnResponse:
     return ConversationTurnResponse(
         user_message=_message_response(turn.user_message),
-        assistant_message=_message_response(turn.assistant_message),
+        assistant_message=_message_response(
+            turn.assistant_message,
+            next_action=turn.next_action,
+        ),
     )
 
 

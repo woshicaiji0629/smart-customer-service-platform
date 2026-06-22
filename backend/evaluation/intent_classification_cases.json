@@ -419,6 +419,104 @@
       "expected_route": "unknown",
       "expected_category": "other",
       "expected_intent": "unknown"
+    },
+    {
+      "id": "frontend_withdrawal_not_arrived",
+      "query": "提现完成但钱包没到账怎么办？",
+      "expected_route": "business_query",
+      "expected_category": "withdrawal",
+      "expected_intent": "missing_arrival"
+    },
+    {
+      "id": "frontend_deposit_not_arrived",
+      "query": "充值一直没到账，我应该怎么处理？",
+      "expected_route": "knowledge_rag",
+      "expected_category": "deposit",
+      "expected_intent": "missing_arrival"
+    },
+    {
+      "id": "frontend_identity_failure",
+      "query": "身份认证失败一般是什么原因？",
+      "expected_route": "knowledge_rag",
+      "expected_category": "identity_verification",
+      "expected_intent": "verification_failure"
+    },
+    {
+      "id": "frontend_account_security",
+      "query": "发现陌生登录，我应该怎么保护账户？",
+      "expected_route": "knowledge_rag",
+      "expected_category": "account_security",
+      "expected_intent": "compromised"
+    },
+    {
+      "id": "frontend_withdrawal_order",
+      "query": "查询 WD-10001",
+      "expected_route": "business_query",
+      "expected_category": "withdrawal",
+      "expected_intent": "status_query"
+    },
+    {
+      "id": "frontend_deposit_txid",
+      "query": "查询 TX-10001",
+      "expected_route": "business_query",
+      "expected_category": "deposit",
+      "expected_intent": "status_query"
+    },
+    {
+      "id": "human_with_deposit_issue",
+      "query": "我要人工，我的充值一直不到账",
+      "expected_route": "knowledge_rag",
+      "expected_category": "deposit",
+      "expected_intent": "missing_arrival"
+    },
+    {
+      "id": "human_with_spot_issue",
+      "query": "找客服，限价单取消不了",
+      "expected_route": "knowledge_rag",
+      "expected_category": "spot_trading",
+      "expected_intent": "trading_question"
+    },
+    {
+      "id": "field_followup_withdrawal_order",
+      "query": "订单号是 WD-10001",
+      "expected_route": "business_query",
+      "expected_category": "withdrawal",
+      "expected_intent": "status_query"
+    },
+    {
+      "id": "field_followup_deposit_txid",
+      "query": "TxID 是 TX-10001",
+      "expected_route": "business_query",
+      "expected_category": "deposit",
+      "expected_intent": "status_query"
+    },
+    {
+      "id": "unknown_generic_failure",
+      "query": "失败了",
+      "expected_route": "unknown",
+      "expected_category": "other",
+      "expected_intent": "unknown"
+    },
+    {
+      "id": "unknown_generic_not_working",
+      "query": "不行啊",
+      "expected_route": "unknown",
+      "expected_category": "other",
+      "expected_intent": "unknown"
+    },
+    {
+      "id": "unknown_generic_cannot_open",
+      "query": "打不开",
+      "expected_route": "unknown",
+      "expected_category": "other",
+      "expected_intent": "unknown"
+    },
+    {
+      "id": "out_of_scope_stock",
+      "query": "帮我分析一下这只股票能买吗",
+      "expected_route": "out_of_scope",
+      "expected_category": "other",
+      "expected_intent": "out_of_scope"
     }
   ]
 }
