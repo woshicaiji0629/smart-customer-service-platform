@@ -1,54 +1,94 @@
 # Smart Customer Service Platform
 
-交易所智能客服平台，前后端使用同一个仓库管理。
+面向交易所客服场景的智能客服平台。项目主线是打通前后端客服闭环，提供流畅的聊天交互，并通过意图识别、实体抽取、业务查询模拟和 RAG 知识检索，尽可能用自动化方式处理常见问题，减少人工客服工作量。
 
-## 目录
+对于无法接入实际业务环境的部分，项目使用 Mock 数据和模拟流程完成演示，例如提现订单、充值记录、身份认证审核状态和人工兜底候选。
 
-- `backend/`：Python 后端，使用 FastAPI 和 uv。
-- `frontend/`：React、TypeScript 和 Vite 前端。
+本仓库采用前后端一体化管理：
 
-## Docker Compose 本地开发
+- 后端：FastAPI、PostgreSQL、pgvector、Redis、DashScope 兼容模型 API。
+- 前端：React、TypeScript、Vite。
+- 本地环境：Docker Compose 一键启动前端、后端、PostgreSQL/pgvector 和 Redis。
 
-Docker Compose 同时启动前端、后端、Redis 和带 pgvector 的 PostgreSQL。
-宿主机不需要单独安装数据库或 Redis。Mock 登录、会话和业务查询无需模型服务
-Key，可以直接启动：
+## 核心能力
+
+- **会话管理**：支持创建会话、发送消息、查看历史和会话列表。
+- **前端交互闭环**：提供 Mock 登录、会话侧边栏、聊天工作台、历史加载和下一步提示。
+- **意图识别**：规则优先、模型兜底，覆盖提现、充值、身份认证、账户安全、现货交易、人工客服和域外问题。
+- **实体抽取**：识别提现订单号、充值 TxID、币种、网络、时间等关键字段。
+- **Mock 业务查询优先**：用户提供明确订单号或 TxID 时，优先查询模拟业务状态，避免大模型猜测订单结果。
+- **知识库 RAG**：基于 PostgreSQL + pgvector 的语义检索，结合大模型生成知识库回答。
+- **回答安全控制**：RAG 回答包含引用校验和 grounding review，减少资料外扩展。
+- **多轮补问**：通过结构化 `next_action` 告诉前端下一步需要用户补充什么。
+- **人工客服处理**：用户明确要求人工客服时，直接返回官方客服入口引导，不受知识库覆盖率影响。
+- **运营观测**：记录意图 trace 和模型用量，支持后续评估、复盘和成本分析。
+
+## 系统架构
+
+```text
+用户
+  |
+  v
+React 客服工作台
+  |
+  v
+FastAPI API
+  |
+  +-- Auth / Redis Session
+  +-- Conversation Service
+        |
+        +-- Intent Service
+        +-- Entity Extraction
+        +-- Business Query
+        +-- Knowledge RAG
+        +-- Answer Polisher
+        +-- Next Action / Trace
+  |
+  v
+PostgreSQL / pgvector / Redis / DashScope
+```
+
+更完整的架构和模块说明见 [docs/project-overview.md](docs/project-overview.md)。
+
+## 适用场景示例
+
+登录 Mock 用户后，可以在客服对话中尝试：
+
+```text
+查询 WD-10001
+充值 TX-10001 没到账
+提现被风控卡住了
+提现已经上链但钱包没到账
+我的身份认证失败了
+我要人工客服
+```
+
+包含明确 Mock 订单号或 TxID 的问题会直接查询当前登录用户的业务数据；知识类问题在配置模型 Key 后进入知识库 RAG。
+
+## 快速开始
+
+启动本地开发环境：
 
 ```bash
 docker compose up --build
 ```
 
-需要使用知识库检索和 RAG 问答时，再设置百炼 API Key：
+访问地址：
+
+```text
+前端：http://localhost:5173
+后端：http://localhost:8000
+API 文档：http://localhost:8000/docs
+```
+
+Mock 登录、会话和业务查询无需模型 Key。需要使用知识库检索和 RAG 问答时，配置百炼 API Key：
 
 ```bash
 export DASHSCOPE_API_KEY='百炼 API Key'
 docker compose up --build
 ```
 
-也可以把 Key 保存在仓库根目录中不会提交到 Git 的 `.env` 文件里。未配置 Key
-时，知识库问答接口返回 503，不影响 Mock 业务查询。PostgreSQL 默认使用仅限
-本地开发的用户 `customer_service` 和密码 `customer_service_dev`，可通过
-`POSTGRES_PASSWORD` 覆盖。
-
-首次启动会自动创建 pgvector 扩展和应用表。PostgreSQL 与 Redis 数据分别保存
-在 `.local-data/postgres/` 和 `.local-data/redis/`，停止或重建容器不会丢失。
-这些目录只包含本地运行数据，不会提交到 Git，也不要手动修改其中的文件。
-
-前端地址为 `http://localhost:5173`，后端 API 文档地址为
-`http://localhost:8000/docs`。本地前后端统一使用 `localhost`，确保 Session
-Cookie 正常发送。源码目录已挂载到容器，前后端均支持热更新。
-PostgreSQL 和 Redis 默认分别暴露 `5432`、`6379` 端口，方便本地调试；可以通过
-`POSTGRES_PORT`、`REDIS_PORT` 修改宿主机端口。
-
-Mock 登录预置用户及对应提现订单如下：
-
-- UID `10001`（模拟用户 Alice）：订单 `WD-10001`。
-- UID `10002`（模拟用户 Bob）：订单 `WD-10002`。
-
-登录后可以在客服对话中输入“查询 WD-10001”。包含明确 Mock 订单号的消息会
-直接查询当前 UID 的业务数据，不经过大模型；提现状态问题未提供订单号时会提示
-用户补充订单号。其他问题在配置模型 Key 后使用知识库 RAG。
-
-Mock 登录只用于验证客服业务查询流程，不应在生产环境开启。
+也可以将环境变量写入仓库根目录下不会提交到 Git 的 `.env` 文件。
 
 停止服务：
 
@@ -56,30 +96,47 @@ Mock 登录只用于验证客服业务查询流程，不应在生产环境开启
 docker compose down
 ```
 
-已有开发数据库从匿名会话升级为用户会话时，需要显式重建会话表：
+## Mock 用户
 
-```bash
-docker compose run --rm backend uv run python -m script.init_database --reset-conversations
+本地开发预置两个 Mock 用户：
+
+| UID | 用户 | 示例提现订单 |
+| --- | --- | --- |
+| `10001` | 模拟用户 Alice | `WD-10001` |
+| `10002` | 模拟用户 Bob | `WD-10002` |
+
+Mock 登录用于验证客服业务查询流程。
+
+## 目录结构
+
+```text
+.
+├── backend/        FastAPI 后端服务
+├── frontend/       React 前端应用
+├── docs/           项目文档
+├── compose.yaml    本地 Docker Compose 编排
+├── Dockerfile      前后端开发镜像
+└── README.md       项目首页说明
 ```
 
-该参数会删除现有会话和消息，只用于已确认可清理数据的开发环境。
+后端主要模块：
 
-彻底清空所有本地数据库和 Session 时，先停止服务，再删除本地数据目录：
-
-```bash
-docker compose down
-rm -rf .local-data
+```text
+backend/src/customer_service/
+├── auth/           Mock 登录和 Session
+├── business/       Mock 提现、充值业务查询
+├── conversations/  会话编排、状态流转、回答润色
+├── entities/       实体抽取
+├── intents/        意图识别
+├── knowledge/      知识库、向量检索、RAG
+├── model_usage/    模型用量统计
+├── ops/            对话 trace 统计
+└── main.py         FastAPI 应用入口
 ```
 
-该操作不可恢复，普通停止服务不要删除 `.local-data`。
+## 本地后端开发
 
-需要构建知识索引时执行：
-
-```bash
-docker compose run --rm backend uv run python -m script.build_knowledge_index --limit 3
-```
-
-## 后端开发
+如果不使用 Docker Compose，可以手动启动后端：
 
 ```bash
 cd backend
@@ -91,47 +148,55 @@ export SESSION_COOKIE_SECURE=false
 uv run uvicorn customer_service.main:app --reload
 ```
 
-服务启动后可访问 `GET /health` 检查运行状态。需要本地调试 RAG 时，启动前额外
-设置 `DASHSCOPE_API_KEY`。
+服务启动后可访问：
 
-运行测试：
+```bash
+curl http://localhost:8000/health
+```
+
+## 知识库索引
+
+构建少量知识库索引用于验证：
+
+```bash
+docker compose run --rm backend uv run python -m script.build_knowledge_index --limit 3
+```
+
+验证语义检索：
+
+```bash
+cd backend
+uv run python -m script.search_knowledge '提现已经完成但钱包没有到账' --limit 5
+```
+
+详细说明见 [docs/project-overview.md](docs/project-overview.md) 和 [docs/postgresql-local-setup.md](docs/postgresql-local-setup.md)。
+
+## 测试
+
+后端测试：
 
 ```bash
 cd backend
 uv run pytest
 ```
 
-## 构建知识检索库
-
-知识库使用 PostgreSQL、pgvector 和阿里云百炼 `text-embedding-v4`（1024 维）。
-数据库用户需要具备创建 `vector` 扩展和数据表的权限。
+对话流评估：
 
 ```bash
 cd backend
-export DATABASE_URL='postgresql+asyncpg://用户名:密码@主机:5432/数据库名'
-export DASHSCOPE_API_KEY='百炼 API Key'
-uv run python -m script.build_knowledge_index
+uv run python -m script.evaluate_conversation_flows
 ```
 
-构建脚本根据文章内容哈希跳过未变化文档。首次验证可以添加 `--limit 3`，
-确认无误后再执行全量构建。不要把数据库密码或 API Key 提交到仓库。
+## 文档
 
-使用内部命令验证语义检索结果：
+- [技术说明](docs/project-overview.md)：模块职责、处理链路、业务边界、接口字段和扩展点。
+- [PostgreSQL 本地开发指南](docs/postgresql-local-setup.md)：本地 PostgreSQL 和 pgvector 安装、初始化和排障。
+- [智能客服 Agent 架构演进路线](docs/customer-service-agent-roadmap.md)：后续能力演进和优化方向。
 
-```bash
-uv run python -m script.search_knowledge '提现已经完成但钱包没有到账' --limit 5
-```
+## 当前限制
 
-## 功能规划
-
-1. 会话与消息管理。
-2. 客服知识库管理。
-3. RAG 检索与智能问答。
-4. AI 模型适配与回答安全控制。
-5. 用户身份校验与交易所业务查询。
-6. 转人工与工单流转。
-7. 权限、敏感信息保护与审计。
-8. 客服管理后台。
-9. React 客服工作台与用户聊天界面。
-
-功能将按需求逐步实现，不提前创建空的业务分层。
+- 业务查询使用 Mock 数据，用于演示客服链路和架构设计。
+- 人工客服目前是入口引导和兜底候选标记，不包含工单流转。
+- RAG 回答依赖知识库覆盖率，资料缺失时只能明确说明无法确认。
+- 对话状态当前为轻量 `next_action`，尚未演进为完整持久化状态机。
+- Mock 登录用于本地开发和演示。
