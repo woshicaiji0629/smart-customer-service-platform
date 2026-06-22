@@ -17,6 +17,7 @@ from customer_service.conversations.api import (
     _encode_cursor,
     get_conversation_service,
 )
+from customer_service.conversations.polisher import ConversationAnswerPolisher
 from customer_service.conversations.repository import (
     ConversationCursor,
     ConversationHistory,
@@ -235,6 +236,53 @@ class FakeRagService:
                 )
             ],
         )
+
+
+class FakeAnswerPolisher:
+    def __init__(
+        self,
+        answer: RagAnswer | None = None,
+        *,
+        should_raise: bool = False,
+    ) -> None:
+        self.answer = answer or RagAnswer(answer="润色后的回答。[资料 1]", sources=[])
+        self.should_raise = should_raise
+        self.calls: list[dict[str, object]] = []
+
+    async def polish(
+        self,
+        *,
+        question: str,
+        answer: RagAnswer,
+        decision: IntentDecision,
+    ) -> RagAnswer:
+        self.calls.append(
+            {
+                "question": question,
+                "answer": answer,
+                "decision": decision,
+            }
+        )
+        if self.should_raise:
+            raise RuntimeError("polish failed")
+        return self.answer
+
+
+class FakePolishChatClient:
+    def __init__(self, response: str) -> None:
+        self.response = response
+        self.requests: list[list[dict[str, str]]] = []
+        self.purposes: list[str] = []
+
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        purpose: str = "chat",
+    ) -> str:
+        self.requests.append(messages.copy())
+        self.purposes.append(purpose)
+        return self.response
 
 
 class FakeIntentRecognizer:
@@ -958,7 +1006,10 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
                 entities={},
                 missing_fields=(),
             ),
-            "请先描述需要解决的具体问题，我会优先尝试自动查询或提供处理方案。",
+            (
+                "已记录你的人工客服诉求。请通过平台 App 或网页端的官方在线客服入口联系人工客服；"
+                "也可以补充具体问题、订单号或页面提示，方便继续处理。"
+            ),
             [],
             "human_request",
             None,
@@ -1019,6 +1070,239 @@ def test_conversation_service_routes_intent_handling_matrix(
     assert repository.traces[0]["intent"] == decision.intent
     assert repository.traces[0]["handling_result"] == expected_handling_result
     assert rag_service.category == expected_knowledge_category
+
+
+def test_conversation_service_uses_fixed_answer_for_human_support_request() -> None:
+    repository = FakeConversationRepository()
+    rag_service = FakeRagService()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=rag_service,  # type: ignore[arg-type]
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    turn = asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "我要找人工客服"))
+
+    assert rag_service.question is None
+    assert rag_service.category is None
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "已记录你的人工客服诉求。请通过平台 App 或网页端的官方在线客服入口联系人工客服；"
+        "也可以补充具体问题、订单号或页面提示，方便继续处理。"
+    )
+    assert repository.saved["assistant_sources"] == []
+    assert repository.traces[0]["handling_result"] == "human_request"
+    assert turn.next_action == {
+        "type": "clarify_problem",
+        "state": "awaiting_problem_description",
+        "expected_input": "problem_description",
+        "missing_fields": ["problem_description"],
+        "manual_fallback_candidate": False,
+    }
+
+
+def test_conversation_service_polishes_identity_failure_rag_answer() -> None:
+    repository = FakeConversationRepository()
+    rag_service = FakeRagService()
+    polished_answer = RagAnswer(
+        answer="身份认证失败可能和照片质量有关。[资料 1]",
+        sources=[
+            RagSource(
+                article_id="article-1",
+                title="身份认证失败",
+                source_url="https://example.com/identity",
+            )
+        ],
+    )
+    polisher = FakeAnswerPolisher(polished_answer)
+    decision = IntentDecision(
+        route="knowledge_rag",
+        category="identity_verification",
+        intent="verification_failure",
+        confidence=1.0,
+        entities={},
+        missing_fields=(),
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=rag_service,  # type: ignore[arg-type]
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=FakeIntentRecognizer(decision),
+        answer_polisher=polisher,
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "我的身份认证失败了"))
+
+    assert len(polisher.calls) == 1
+    assert polisher.calls[0]["question"] == "我的身份认证失败了"
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "身份认证失败可能和照片质量有关。[资料 1]"
+    )
+    assert repository.saved["assistant_sources"] == [
+        {
+            "article_id": "article-1",
+            "title": "身份认证失败",
+            "source_url": "https://example.com/identity",
+        }
+    ]
+    assert repository.traces[0]["handling_result"] == "rag_answer"
+
+
+def test_conversation_service_does_not_polish_other_rag_answers() -> None:
+    repository = FakeConversationRepository()
+    rag_service = FakeRagService()
+    polisher = FakeAnswerPolisher()
+    decision = IntentDecision(
+        route="knowledge_rag",
+        category="spot_trading",
+        intent="trading_question",
+        confidence=1.0,
+        entities={},
+        missing_fields=(),
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=rag_service,  # type: ignore[arg-type]
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=FakeIntentRecognizer(decision),
+        answer_polisher=polisher,
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "限价单为什么没成交"))
+
+    assert polisher.calls == []
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == "请查询 TxID。[资料 1]"
+
+
+def test_conversation_service_keeps_original_rag_answer_when_polish_fails() -> None:
+    repository = FakeConversationRepository()
+    rag_service = FakeRagService()
+    polisher = FakeAnswerPolisher(should_raise=True)
+    decision = IntentDecision(
+        route="knowledge_rag",
+        category="identity_verification",
+        intent="verification_failure",
+        confidence=1.0,
+        entities={},
+        missing_fields=(),
+    )
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=rag_service,  # type: ignore[arg-type]
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=FakeIntentRecognizer(decision),
+        answer_polisher=polisher,
+    )
+
+    asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "身份认证失败"))
+
+    assert len(polisher.calls) == 1
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == "请查询 TxID。[资料 1]"
+    assert repository.traces[0]["handling_result"] == "rag_answer"
+
+
+def test_conversation_answer_polisher_uses_chat_client() -> None:
+    chat_client = FakePolishChatClient("你的身份证没问题，也可能因为照片不清晰失败。[资料 1]")
+    polisher = ConversationAnswerPolisher(chat_client)  # type: ignore[arg-type]
+    original = RagAnswer(
+        answer="身份认证失败的原因包括文件质量低。[资料 1]",
+        sources=[
+            RagSource(
+                article_id="article-1",
+                title="身份认证失败",
+                source_url="https://example.com/identity",
+            )
+        ],
+    )
+    decision = IntentDecision(
+        route="knowledge_rag",
+        category="identity_verification",
+        intent="verification_failure",
+        confidence=1.0,
+        entities={},
+        missing_fields=(),
+    )
+
+    result = asyncio.run(
+        polisher.polish(
+            question="我的身份证没问题，为什么认证失败",
+            answer=original,
+            decision=decision,
+        )
+    )
+
+    assert result.answer == "你的身份证没问题，也可能因为照片不清晰失败。[资料 1]"
+    assert result.sources == original.sources
+    assert chat_client.purposes == ["answer_polish"]
+    assert "只润色表达，不新增事实" in chat_client.requests[0][0]["content"]
+    assert "用户问题：我的身份证没问题，为什么认证失败" in (
+        chat_client.requests[0][1]["content"]
+    )
+    assert "待润色回答" in chat_client.requests[0][1]["content"]
+
+
+def test_conversation_answer_polisher_keeps_original_when_citation_is_dropped() -> None:
+    chat_client = FakePolishChatClient("你的身份证没问题，也可能因为照片不清晰失败。")
+    polisher = ConversationAnswerPolisher(chat_client)  # type: ignore[arg-type]
+    original = RagAnswer(
+        answer="身份认证失败的原因包括文件质量低。[资料 1]",
+        sources=[
+            RagSource(
+                article_id="article-1",
+                title="身份认证失败",
+                source_url="https://example.com/identity",
+            )
+        ],
+    )
+    decision = IntentDecision(
+        route="knowledge_rag",
+        category="identity_verification",
+        intent="verification_failure",
+        confidence=1.0,
+        entities={},
+        missing_fields=(),
+    )
+
+    result = asyncio.run(
+        polisher.polish(
+            question="我的身份证没问题，为什么认证失败",
+            answer=original,
+            decision=decision,
+        )
+    )
+
+    assert result == original
+    assert chat_client.purposes == ["answer_polish"]
+
+
+def test_conversation_service_falls_back_when_human_support_rag_unavailable() -> None:
+    repository = FakeConversationRepository()
+    service = ConversationService(
+        repository=repository,  # type: ignore[arg-type]
+        rag_service=None,
+        withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
+        intent_service=IntentService(None),
+    )
+
+    turn = asyncio.run(service.send_message(USER_ID, CONVERSATION_ID, "我要找人工客服"))
+
+    assert repository.saved is not None
+    assert repository.saved["assistant_content"] == (
+        "已记录你的人工客服诉求。请通过平台 App 或网页端的官方在线客服入口联系人工客服；"
+        "也可以补充具体问题、订单号或页面提示，方便继续处理。"
+    )
+    assert repository.traces[0]["handling_result"] == "human_request"
+    assert turn.next_action == {
+        "type": "clarify_problem",
+        "state": "awaiting_problem_description",
+        "expected_input": "problem_description",
+        "missing_fields": ["problem_description"],
+        "manual_fallback_candidate": False,
+    }
 
 
 def test_conversation_service_routes_deposit_txid_to_business_query() -> None:

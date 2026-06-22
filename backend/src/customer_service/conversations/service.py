@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 import re
+from typing import Protocol
 from uuid import UUID
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -60,11 +61,15 @@ UNKNOWN_INTENT_FALLBACK_PROMPT = (
     "或直接发送订单号/TxID；本次未解决情况已记录用于后续兜底统计。"
 )
 HUMAN_REQUEST_PROMPT = (
-    "请先描述需要解决的具体问题，我会优先尝试自动查询或提供处理方案。"
+    "已记录你的人工客服诉求。请通过平台 App 或网页端的官方在线客服入口联系人工客服；"
+    "也可以补充具体问题、订单号或页面提示，方便继续处理。"
 )
 HUMAN_REQUEST_FALLBACK_PROMPT = (
     "我已记录你需要人工兜底的诉求。请继续补充具体问题、订单号或页面提示，"
     "我会先尝试自动处理，无法处理的情况会进入兜底统计。"
+)
+LEGACY_HUMAN_REQUEST_PROMPT = (
+    "请先描述需要解决的具体问题，我会优先尝试自动查询或提供处理方案。"
 )
 OUT_OF_SCOPE_ANSWER = "我目前只能处理交易所账户、交易和平台使用相关的问题。"
 WITHDRAWAL_ONCHAIN_TRANSPARENT_ANSWER = (
@@ -98,6 +103,16 @@ class BusinessTask:
     not_found_result: str
 
 
+class AnswerPolisher(Protocol):
+    async def polish(
+        self,
+        *,
+        question: str,
+        answer: RagAnswer,
+        decision: IntentDecision,
+    ) -> RagAnswer: ...
+
+
 WITHDRAWAL_STATUS_TASK = BusinessTask(
     entity_key="order_id",
     missing_prompt=WITHDRAWAL_ORDER_ID_PROMPT,
@@ -125,6 +140,7 @@ class ConversationService:
         withdrawal_service: WithdrawalLookup,
         intent_service: IntentRecognizer,
         deposit_service: DepositLookup | None = None,
+        answer_polisher: AnswerPolisher | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self._repository = repository
@@ -132,6 +148,7 @@ class ConversationService:
         self._deposit_service = deposit_service or MOCK_DEPOSIT_SERVICE
         self._withdrawal_service = withdrawal_service
         self._intent_service = intent_service
+        self._answer_polisher = answer_polisher
         self._now = now or (lambda: datetime.now(UTC))
 
     async def create_conversation(self, user_id: str) -> ConversationRecord:
@@ -312,6 +329,7 @@ class ConversationService:
                 history,
                 HUMAN_REQUEST_PROMPT,
                 HUMAN_REQUEST_FALLBACK_PROMPT,
+                LEGACY_HUMAN_REQUEST_PROMPT,
             )
             if previous_human_requests >= MANUAL_FALLBACK_AFTER_ATTEMPTS - 1:
                 return IntentAnswer(
@@ -349,14 +367,46 @@ class ConversationService:
             )
         if self._rag_service is None:
             raise RagUnavailableError
+        rag_answer = await self._rag_service.answer(
+            content,
+            history=history,
+            category=_knowledge_category_for_intent(decision),
+        )
         return IntentAnswer(
-            answer=await self._rag_service.answer(
-                content,
-                history=history,
-                category=_knowledge_category_for_intent(decision),
+            answer=await self._polish_rag_answer_if_needed(
+                question=content,
+                answer=rag_answer,
+                decision=decision,
             ),
             handling_result="rag_answer",
         )
+
+    async def _polish_rag_answer_if_needed(
+        self,
+        *,
+        question: str,
+        answer: RagAnswer,
+        decision: IntentDecision,
+    ) -> RagAnswer:
+        if self._answer_polisher is None:
+            return answer
+        if (
+            decision.category != "identity_verification"
+            or decision.intent != "verification_failure"
+        ):
+            return answer
+        try:
+            polished = await self._answer_polisher.polish(
+                question=question,
+                answer=answer,
+                decision=decision,
+            )
+        except Exception:
+            logger.exception("failed_to_polish_rag_answer")
+            return answer
+        if not polished.answer.strip():
+            return answer
+        return polished
 
     async def _record_turn_trace(
         self,

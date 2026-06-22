@@ -156,7 +156,7 @@ export function ChatWorkspace({
                 <span />
                 <span />
                 <span />
-                正在查找资料
+                正在处理
               </div>
             )}
             <div ref={endRef} />

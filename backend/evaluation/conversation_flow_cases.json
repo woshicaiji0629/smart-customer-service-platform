@@ -101,7 +101,7 @@
       "turns": [
         {
           "user": "人工",
-          "expected_assistant_contains": "请先描述需要解决的具体问题",
+          "expected_assistant_contains": "官方在线客服入口",
           "expected_next_action_state": "awaiting_problem_description",
           "expected_trace": {
             "route": "human_request",
