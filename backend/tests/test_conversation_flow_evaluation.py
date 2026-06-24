@@ -15,6 +15,8 @@ def test_conversation_flow_cases_cover_deposit_followup_mainline() -> None:
     assert set(cases_by_id) == {
         "deposit_missing_arrival_followup",
         "withdrawal_missing_order_followup",
+        "withdrawal_pending_switch_to_deposit_txid",
+        "deposit_pending_human_request",
         "repeated_unknown_manual_fallback",
         "repeated_human_request_manual_fallback",
     }
@@ -30,6 +32,42 @@ def test_conversation_flow_cases_cover_deposit_followup_mainline() -> None:
         turn.expected_next_action_state
         for turn in cases_by_id["withdrawal_missing_order_followup"].turns
     ] == ["awaiting_withdrawal_order_id", None]
+    assert (
+        cases_by_id["deposit_missing_arrival_followup"]
+        .turns[0]
+        .expected_trace
+        .missing_fields
+        == ("txid",)
+    )
+    assert (
+        cases_by_id["deposit_missing_arrival_followup"]
+        .turns[1]
+        .expected_trace
+        .entities
+        == {"txid": "TX-10002"}
+    )
+    assert (
+        cases_by_id["withdrawal_missing_order_followup"]
+        .turns[0]
+        .expected_trace
+        .missing_fields
+        == ("order_id",)
+    )
+    assert (
+        cases_by_id["withdrawal_missing_order_followup"]
+        .turns[1]
+        .expected_trace
+        .entities
+        == {"order_id": "WD-10001"}
+    )
+    assert [
+        turn.expected_next_action_state
+        for turn in cases_by_id["withdrawal_pending_switch_to_deposit_txid"].turns
+    ] == ["awaiting_withdrawal_order_id", None]
+    assert [
+        turn.expected_next_action_state
+        for turn in cases_by_id["deposit_pending_human_request"].turns
+    ] == ["awaiting_deposit_txid", "awaiting_problem_description"]
 
 
 def test_conversation_flow_evaluation_runs_deposit_followup_mainline() -> None:
@@ -37,19 +75,46 @@ def test_conversation_flow_evaluation_runs_deposit_followup_mainline() -> None:
 
     results = asyncio.run(evaluate_cases(cases))
 
-    assert len(results) == 9
+    assert len(results) == 13
     assert all(isinstance(result, ConversationFlowTurnResult) for result in results)
     assert all(result.full_ok for result in results)
-    assert [result.trace["handling_result"] for result in results[:3]] == [
-        "missing_deposit_txid",
-        "business_deposit_not_found",
-        "deposit_followup_received",
-    ]
-    assert [result.trace["handling_result"] for result in results[3:]] == [
-        "missing_withdrawal_order_id",
-        "business_withdrawal_found",
-        "unknown",
-        "manual_fallback_candidate",
-        "human_request",
-        "manual_fallback_candidate",
-    ]
+    results_by_turn = {
+        (result.case_id, result.turn_index): result
+        for result in results
+    }
+    assert (
+        results_by_turn[
+            ("deposit_missing_arrival_followup", 1)
+        ].trace["missing_fields"]
+        == ("txid",)
+    )
+    assert (
+        results_by_turn[
+            ("deposit_missing_arrival_followup", 2)
+        ].trace["entities"]
+        == {"txid": "TX-10002"}
+    )
+    assert (
+        results_by_turn[
+            ("withdrawal_missing_order_followup", 1)
+        ].trace["missing_fields"]
+        == ("order_id",)
+    )
+    assert (
+        results_by_turn[
+            ("withdrawal_missing_order_followup", 2)
+        ].trace["entities"]
+        == {"order_id": "WD-10001"}
+    )
+    assert (
+        results_by_turn[
+            ("withdrawal_pending_switch_to_deposit_txid", 2)
+        ].trace["handling_result"]
+        == "business_deposit_found"
+    )
+    assert (
+        results_by_turn[
+            ("deposit_pending_human_request", 2)
+        ].trace["handling_result"]
+        == "human_request"
+    )

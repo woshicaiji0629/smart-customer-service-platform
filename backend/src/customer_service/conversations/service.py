@@ -27,6 +27,7 @@ from customer_service.conversations.repository import (
     ConversationRecord,
     ConversationRepository,
     ConversationTurn,
+    ConversationTurnTraceRecord,
 )
 from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage, RagService
 from customer_service.entities.service import extract_entities
@@ -39,6 +40,7 @@ from customer_service.intents.service import (
 
 MAX_MESSAGE_LENGTH = 4_000
 MAX_HISTORY_MESSAGES = 6
+MAX_RECENT_TRACES = 3
 INACTIVE_CONVERSATION_CLOSE_AFTER_SECONDS = 300
 DEFAULT_CONVERSATION_LIST_LIMIT = 50
 MAX_CONVERSATION_LIST_LIMIT = 100
@@ -101,6 +103,18 @@ class BusinessTask:
     missing_result: str
     found_result: str
     not_found_result: str
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationTaskContext:
+    current_task: str
+    current_route: str
+    current_category: str
+    current_intent: str
+    collected_entities: dict[str, str]
+    missing_fields: tuple[str, ...]
+    last_handling_result: str
+    manual_fallback_candidate: bool
 
 
 class AnswerPolisher(Protocol):
@@ -201,9 +215,19 @@ class ConversationService:
             normalized_content,
             history=intent_history,
         )
+        active_traces = (
+            []
+            if is_inactive
+            else await self._repository.get_recent_turn_traces(
+                conversation_id,
+                user_id=user_id,
+                limit=MAX_RECENT_TRACES,
+            )
+        )
         decision, normalized_content = _apply_pending_intent(
             decision,
             active_messages,
+            active_traces,
             normalized_content,
         )
         rag_history = [
@@ -442,7 +466,16 @@ class ConversationService:
         user_id: str,
         conversation_id: UUID,
     ) -> ConversationHistory:
-        return await self._repository.get_history(conversation_id, user_id)
+        history = await self._repository.get_history(conversation_id, user_id)
+        traces = await self._repository.get_recent_turn_traces(
+            conversation_id,
+            user_id=user_id,
+            limit=1,
+        )
+        next_action = _history_next_action(history.messages, traces)
+        if next_action is None:
+            return history
+        return replace(history, next_action=next_action)
 
 
 class RagUnavailableError(RuntimeError):
@@ -465,12 +498,17 @@ def _is_inactive_context(
 def _apply_pending_intent(
     decision: IntentDecision,
     history: list[MessageRecord],
+    traces: list[ConversationTurnTraceRecord],
     content: str,
 ) -> tuple[IntentDecision, str]:
     if decision.route != "unknown":
         return decision, content
-    pending_category = _pending_category_from_history(history)
-    if pending_category == "deposit_followup":
+    task_context = _task_context_from_traces(
+        traces,
+    ) or _task_context_from_history(history)
+    if task_context is None:
+        return decision, content
+    if task_context.current_task == "deposit_followup":
         return IntentDecision(
             route="human_request",
             category="deposit",
@@ -480,7 +518,7 @@ def _apply_pending_intent(
             missing_fields=(),
             source="fallback",
         ), content
-    if pending_category == "deposit":
+    if task_context.current_task == "deposit_status":
         normalized_content = _prefixed_pending_identifier(content, prefix="TX")
         entities = {"txid": normalized_content} if normalized_content != content else {}
         missing_fields: tuple[str, ...] = () if entities else ("txid",)
@@ -493,7 +531,7 @@ def _apply_pending_intent(
             missing_fields=missing_fields,
             source="fallback",
         ), content
-    if pending_category == "withdrawal":
+    if task_context.current_task == "withdrawal_status":
         normalized_content = _prefixed_pending_identifier(content, prefix="WD")
         entities = (
             {"order_id": normalized_content} if normalized_content != content else {}
@@ -518,20 +556,133 @@ def _prefixed_pending_identifier(content: str, *, prefix: str) -> str:
     return f"{prefix}-{stripped}"
 
 
-def _pending_category_from_history(history: list[MessageRecord]) -> str | None:
+def _task_context_from_traces(
+    traces: list[ConversationTurnTraceRecord],
+) -> ConversationTaskContext | None:
+    for trace in reversed(traces):
+        if trace.is_inactive_reset:
+            return None
+        if trace.handling_result == "business_deposit_not_found":
+            return _task_context(trace, current_task="deposit_followup")
+        if trace.handling_result == "missing_deposit_txid":
+            return _task_context(trace, current_task="deposit_status")
+        if trace.handling_result == "missing_withdrawal_order_id":
+            return _task_context(trace, current_task="withdrawal_status")
+        return None
+    return None
+
+
+def _task_context(
+    trace: ConversationTurnTraceRecord,
+    *,
+    current_task: str,
+) -> ConversationTaskContext:
+    return ConversationTaskContext(
+        current_task=current_task,
+        current_route=trace.route,
+        current_category=trace.category,
+        current_intent=trace.intent,
+        collected_entities=dict(trace.entities),
+        missing_fields=trace.missing_fields,
+        last_handling_result=trace.handling_result,
+        manual_fallback_candidate=trace.handling_result == "manual_fallback_candidate",
+    )
+
+
+def _task_context_from_history(
+    history: list[MessageRecord],
+) -> ConversationTaskContext | None:
     for message in reversed(history):
         role = getattr(message, "role", None)
         content = getattr(message, "content", "")
         if role != "assistant" or not isinstance(content, str):
             continue
         if DEPOSIT_FOLLOWUP_PROMPT in content:
-            return "deposit_followup"
+            return _legacy_task_context(
+                current_task="deposit_followup",
+                category="deposit",
+                intent="followup_details",
+                handling_result="business_deposit_not_found",
+            )
         if DEPOSIT_TXID_PROMPT in content:
-            return "deposit"
+            return _legacy_task_context(
+                current_task="deposit_status",
+                category="deposit",
+                intent="missing_arrival",
+                handling_result="missing_deposit_txid",
+                missing_fields=("txid",),
+            )
         if WITHDRAWAL_ORDER_ID_PROMPT in content:
-            return "withdrawal"
+            return _legacy_task_context(
+                current_task="withdrawal_status",
+                category="withdrawal",
+                intent="missing_arrival",
+                handling_result="missing_withdrawal_order_id",
+                missing_fields=("order_id",),
+            )
         return None
     return None
+
+
+def _legacy_task_context(
+    *,
+    current_task: str,
+    category: str,
+    intent: str,
+    handling_result: str,
+    missing_fields: tuple[str, ...] = (),
+) -> ConversationTaskContext:
+    return ConversationTaskContext(
+        current_task=current_task,
+        current_route="unknown",
+        current_category=category,
+        current_intent=intent,
+        collected_entities={},
+        missing_fields=missing_fields,
+        last_handling_result=handling_result,
+        manual_fallback_candidate=False,
+    )
+
+
+def _history_next_action(
+    messages: list[MessageRecord],
+    traces: list[ConversationTurnTraceRecord],
+) -> dict[str, object] | None:
+    if not _last_message_is_assistant(messages):
+        return None
+    if not traces:
+        return None
+    trace = traces[-1]
+    if trace.is_inactive_reset:
+        return None
+    return _next_action_from_trace(trace)
+
+
+def _last_message_is_assistant(messages: list[MessageRecord]) -> bool:
+    return bool(messages) and messages[-1].role == "assistant"
+
+
+def _next_action_from_trace(
+    trace: ConversationTurnTraceRecord,
+) -> dict[str, object] | None:
+    action_by_result = {
+        "missing_withdrawal_order_id": "provide_withdrawal_order_id",
+        "business_withdrawal_pending_review": "provide_withdrawal_review_details",
+        "missing_deposit_txid": "provide_deposit_txid",
+        "business_deposit_not_found": "provide_deposit_followup_details",
+        "unknown": "clarify_problem",
+        "human_request": "clarify_problem",
+    }
+    if trace.handling_result == "manual_fallback_candidate":
+        return _next_action("clarify_problem", manual_fallback_candidate=True)
+    action_type = action_by_result.get(trace.handling_result)
+    if action_type is None:
+        return None
+    return _next_action(
+        action_type,
+        manual_fallback_candidate=trace.handling_result
+        == "business_withdrawal_pending_review",
+    )
 
 
 def _missing_task_answer(task: BusinessTask) -> IntentAnswer:

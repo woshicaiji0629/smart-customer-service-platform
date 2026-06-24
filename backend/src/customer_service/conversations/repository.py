@@ -133,9 +133,23 @@ class ConversationTurn:
 
 
 @dataclass(frozen=True, slots=True)
+class ConversationTurnTraceRecord:
+    route: str
+    category: str
+    intent: str
+    intent_source: str
+    entities: dict[str, str]
+    missing_fields: tuple[str, ...]
+    handling_result: str
+    is_inactive_reset: bool
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class ConversationHistory:
     conversation: ConversationRecord
     messages: list[MessageRecord]
+    next_action: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -374,6 +388,31 @@ class ConversationRepository:
             rows = (await connection.execute(statement)).mappings().all()
         return list(reversed([_message_from_row(row) for row in rows]))
 
+    async def get_recent_turn_traces(
+        self,
+        conversation_id: UUID,
+        *,
+        user_id: str,
+        limit: int,
+    ) -> list[ConversationTurnTraceRecord]:
+        if limit <= 0:
+            raise ValueError("limit 必须大于 0")
+        statement = (
+            select(conversation_turn_traces)
+            .where(
+                conversation_turn_traces.c.conversation_id == conversation_id,
+                conversation_turn_traces.c.user_id == user_id,
+            )
+            .order_by(
+                conversation_turn_traces.c.created_at.desc(),
+                conversation_turn_traces.c.id.desc(),
+            )
+            .limit(limit)
+        )
+        async with self.engine.connect() as connection:
+            rows = (await connection.execute(statement)).mappings().all()
+        return list(reversed([_turn_trace_from_row(row) for row in rows]))
+
     async def get_history(
         self,
         conversation_id: UUID,
@@ -417,6 +456,20 @@ def _message_from_row(row: Mapping[str, Any]) -> MessageRecord:
         role=row["role"],
         content=row["content"],
         sources=[dict(source) for source in row["sources"]],
+        created_at=row["created_at"],
+    )
+
+
+def _turn_trace_from_row(row: Mapping[str, Any]) -> ConversationTurnTraceRecord:
+    return ConversationTurnTraceRecord(
+        route=row["route"],
+        category=row["category"],
+        intent=row["intent"],
+        intent_source=row["intent_source"],
+        entities=dict(row["entities"]),
+        missing_fields=tuple(row["missing_fields"]),
+        handling_result=row["handling_result"],
+        is_inactive_reset=row["is_inactive_reset"],
         created_at=row["created_at"],
     )
 

@@ -56,7 +56,8 @@
       "query": "我从其他平台充币过来一直没有到账",
       "expected_route": "knowledge_rag",
       "expected_category": "deposit",
-      "expected_intent": "missing_arrival"
+      "expected_intent": "missing_arrival",
+      "expected_missing_fields": ["txid"]
     },
     {
       "id": "identity_failure",

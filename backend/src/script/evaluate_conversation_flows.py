@@ -20,6 +20,7 @@ from customer_service.conversations.repository import (
     ConversationRecord,
     ConversationSummary,
     ConversationTurn,
+    ConversationTurnTraceRecord,
     MessageRecord,
 )
 from customer_service.conversations.service import ConversationService
@@ -42,6 +43,8 @@ class ExpectedTrace:
     category: str
     intent: str
     handling_result: str
+    entities: dict[str, str] | None = None
+    missing_fields: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,11 +87,26 @@ class ConversationFlowTurnResult:
             and self.trace.get("category") == expected.category
             and self.trace.get("intent") == expected.intent
             and self.trace.get("handling_result") == expected.handling_result
+            and self._entities_ok(expected)
+            and self._missing_fields_ok(expected)
         )
 
     @property
     def full_ok(self) -> bool:
         return self.assistant_ok and self.next_action_ok and self.trace_ok
+
+    def _entities_ok(self, expected: ExpectedTrace) -> bool:
+        if expected.entities is None:
+            return True
+        return self.trace.get("entities") == expected.entities
+
+    def _missing_fields_ok(self, expected: ExpectedTrace) -> bool:
+        if expected.missing_fields is None:
+            return True
+        raw_missing_fields = self.trace.get("missing_fields")
+        if not isinstance(raw_missing_fields, (list, tuple)):
+            return False
+        return tuple(raw_missing_fields) == expected.missing_fields
 
 
 class MemoryConversationRepository:
@@ -167,6 +185,17 @@ class MemoryConversationRepository:
         if conversation_id != self.conversation_id:
             raise ConversationNotFoundError(str(conversation_id))
         return self.messages[-limit:]
+
+    async def get_recent_turn_traces(
+        self,
+        conversation_id: UUID,
+        *,
+        user_id: str,
+        limit: int,
+    ) -> list[ConversationTurnTraceRecord]:
+        if conversation_id != self.conversation_id:
+            raise ConversationNotFoundError(str(conversation_id))
+        return [_trace_record(trace) for trace in self.traces[-limit:]]
 
     async def get_history(
         self,
@@ -322,7 +351,46 @@ def _parse_expected_trace(case_id: str, raw_trace: dict[object, object]) -> Expe
         category=str(values["category"]),
         intent=str(values["intent"]),
         handling_result=str(values["handling_result"]),
+        entities=_parse_expected_entities(case_id, raw_trace.get("entities")),
+        missing_fields=_parse_expected_missing_fields(
+            case_id,
+            raw_trace.get("missing_fields"),
+        ),
     )
+
+
+def _parse_expected_entities(
+    case_id: str,
+    raw_entities: object,
+) -> dict[str, str] | None:
+    if raw_entities is None:
+        return None
+    if not isinstance(raw_entities, dict):
+        raise ValueError(f"会话流评估 expected_trace.entities 无效: {case_id}")
+    entities: dict[str, str] = {}
+    for key, value in raw_entities.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise ValueError(f"会话流评估 expected_trace.entities 无效: {case_id}")
+        entities[key] = value
+    return entities
+
+
+def _parse_expected_missing_fields(
+    case_id: str,
+    raw_missing_fields: object,
+) -> tuple[str, ...] | None:
+    if raw_missing_fields is None:
+        return None
+    if not isinstance(raw_missing_fields, list):
+        raise ValueError(f"会话流评估 expected_trace.missing_fields 无效: {case_id}")
+    missing_fields: list[str] = []
+    for field in raw_missing_fields:
+        if not isinstance(field, str) or not field:
+            raise ValueError(
+                f"会话流评估 expected_trace.missing_fields 无效: {case_id}"
+            )
+        missing_fields.append(field)
+    return tuple(missing_fields)
 
 
 def _next_action_state(next_action: dict[str, object]) -> str | None:
@@ -358,6 +426,20 @@ def _conversation_record(user_id: str, conversation_id: UUID) -> ConversationRec
         user_id=user_id,
         created_at=CREATED_AT,
         updated_at=CREATED_AT,
+    )
+
+
+def _trace_record(values: dict[str, object]) -> ConversationTurnTraceRecord:
+    return ConversationTurnTraceRecord(
+        route=str(values["route"]),
+        category=str(values["category"]),
+        intent=str(values["intent"]),
+        intent_source=str(values["intent_source"]),
+        entities=dict(values["entities"]),  # type: ignore[arg-type]
+        missing_fields=tuple(values["missing_fields"]),  # type: ignore[arg-type]
+        handling_result=str(values["handling_result"]),
+        is_inactive_reset=bool(values["is_inactive_reset"]),
+        created_at=CREATED_AT,
     )
 
 

@@ -378,7 +378,12 @@ def _recognize_with_rules(
     ):
         return _knowledge_decision("withdrawal", _withdrawal_intent(content))
     if any(term in lowered for term in DEPOSIT_CATEGORY_TERMS):
-        return _knowledge_decision("deposit", _deposit_intent(content))
+        deposit_intent = _deposit_intent(content)
+        return _knowledge_decision(
+            "deposit",
+            deposit_intent,
+            missing_fields=("txid",) if deposit_intent == "missing_arrival" else (),
+        )
     if any(term in lowered for term in GENERAL_PLATFORM_TOPIC_TERMS):
         return _knowledge_decision(
             "general_platform",
@@ -590,6 +595,8 @@ def _identity_verification_intent(content: str) -> IntentName:
 def _knowledge_decision(
     category: IntentCategory,
     intent: IntentName,
+    *,
+    missing_fields: tuple[str, ...] = (),
 ) -> IntentDecision:
     return IntentDecision(
         route="knowledge_rag",
@@ -597,7 +604,7 @@ def _knowledge_decision(
         intent=intent,
         confidence=1.0,
         entities={},
-        missing_fields=(),
+        missing_fields=missing_fields,
         source="rule",
     )
 

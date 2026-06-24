@@ -308,9 +308,27 @@ def _turn_response(turn: ConversationTurn) -> ConversationTurnResponse:
 
 def _history_response(history: ConversationHistory) -> ConversationHistoryResponse:
     conversation = history.conversation
+    last_assistant_message_id = _last_assistant_message_id(history.messages)
     return ConversationHistoryResponse(
         id=conversation.conversation_id,
         created_at=conversation.created_at,
         updated_at=conversation.updated_at,
-        messages=[_message_response(message) for message in history.messages],
+        messages=[
+            _message_response(
+                message,
+                next_action=(
+                    history.next_action
+                    if message.message_id == last_assistant_message_id
+                    else None
+                ),
+            )
+            for message in history.messages
+        ],
     )
+
+
+def _last_assistant_message_id(messages: list[MessageRecord]) -> int | None:
+    for message in reversed(messages):
+        if message.role == "assistant":
+            return message.message_id
+    return None

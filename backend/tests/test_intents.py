@@ -75,6 +75,7 @@ def test_rule_knowledge_decision_includes_extracted_entities() -> None:
         "network": "TRC20",
         "time_hint": "昨天 09:15",
     }
+    assert decision.missing_fields == ("txid",)
 
 
 def test_rules_request_missing_withdrawal_order() -> None:
@@ -408,6 +409,7 @@ def test_default_intent_evaluation_cases_are_valid() -> None:
     assert cases_by_id["withdrawal_platform_risk_hold"].expected_missing_fields == (
         "order_id",
     )
+    assert cases_by_id["deposit_not_received"].expected_missing_fields == ("txid",)
     assert cases_by_id["withdrawal_onchain_completed_not_arrived"].expected_intent == (
         "onchain_status"
     )

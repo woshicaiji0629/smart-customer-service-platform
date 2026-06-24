@@ -81,6 +81,21 @@ describe("composerGuidanceFromMessages", () => {
     expect(guidance.placeholder).toBe("输入充值 TxID，例如 TX-10001");
   });
 
+  it("历史消息恢复 next_action 后不依赖助手文案切换为 TxID 提示", () => {
+    const guidance = composerGuidanceFromMessages([
+      message("user", "我的充值一直没到账"),
+      message("assistant", "历史恢复出的普通回复。", {
+        type: "provide_deposit_txid",
+        state: "awaiting_deposit_txid",
+        expected_input: "deposit_txid",
+        missing_fields: ["txid"],
+        manual_fallback_candidate: false,
+      }),
+    ]);
+
+    expect(guidance.placeholder).toBe("输入充值 TxID，例如 TX-10001");
+  });
+
   it("优先使用结构化状态切换输入提示", () => {
     const guidance = composerGuidanceFromMessages([
       message("assistant", "请补充信息。", {
