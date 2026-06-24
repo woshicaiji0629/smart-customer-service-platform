@@ -7,7 +7,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from customer_service.knowledge.chat import ChatMessage, DashScopeChatClient
-from customer_service.knowledge.usage import ModelUsageRecord
 from customer_service.knowledge.rag import (
     NO_KNOWLEDGE_ANSWER,
     RagAnswer,
@@ -17,8 +16,8 @@ from customer_service.knowledge.rag import (
     RagSource,
 )
 from customer_service.knowledge.repository import SearchResult
+from customer_service.knowledge.usage import ModelUsageRecord
 from customer_service.main import app, get_rag_service
-
 
 SEARCH_RESULTS = [
     SearchResult(

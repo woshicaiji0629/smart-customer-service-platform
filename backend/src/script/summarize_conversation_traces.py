@@ -11,7 +11,6 @@ from datetime import UTC, datetime, timedelta
 
 from customer_service.ops.repository import OpsRepository, TraceCount, TraceSample
 
-
 DEFAULT_SAMPLE_HANDLING_RESULTS = (
     "unknown",
     "manual_fallback_candidate",

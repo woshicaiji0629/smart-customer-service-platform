@@ -25,15 +25,14 @@ from customer_service.conversations.repository import (
 )
 from customer_service.conversations.service import (
     DEFAULT_CONVERSATION_LIST_LIMIT,
-    MAX_MESSAGE_LENGTH,
     MAX_CONVERSATION_LIST_LIMIT,
+    MAX_MESSAGE_LENGTH,
     ConversationService,
     RagUnavailableError,
 )
 from customer_service.knowledge.chat import ChatCompletionError
 from customer_service.knowledge.embeddings import EmbeddingError
 from customer_service.knowledge.rag import RagCitationError
-
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 

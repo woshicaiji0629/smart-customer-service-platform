@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from customer_service.knowledge.repository import SearchResult
 import script.evaluate_knowledge_search as evaluation
+from customer_service.knowledge.repository import SearchResult
 from script.evaluate_knowledge_search import (
     DEFAULT_CASES_PATH,
     calculate_metrics,

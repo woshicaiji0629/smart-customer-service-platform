@@ -28,9 +28,9 @@ from sqlalchemy import (
     text,
     update,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgreSQLUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
 
 metadata = MetaData()
 CONVERSATION_TITLE_LENGTH = 24

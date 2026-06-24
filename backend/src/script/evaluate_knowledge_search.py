@@ -19,7 +19,6 @@ from customer_service.knowledge.embeddings import (
 from customer_service.knowledge.repository import KnowledgeRepository, SearchResult
 from customer_service.knowledge.service import KnowledgeSearchService
 
-
 DEFAULT_CASES_PATH: Final = (
     Path(__file__).resolve().parents[2]
     / "evaluation"

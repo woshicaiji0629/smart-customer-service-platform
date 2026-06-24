@@ -12,19 +12,18 @@ from typing import Final, Literal, cast
 
 from customer_service.intents.service import (
     ALLOWED_ENTITY_KEYS,
-    IntentCategory,
-    IntentDecision,
-    IntentName,
-    IntentRoute,
-    IntentService,
-    IntentRecognizer,
     VALID_CATEGORIES,
     VALID_INTENTS,
     VALID_ROUTES,
+    IntentCategory,
+    IntentDecision,
+    IntentName,
+    IntentRecognizer,
+    IntentRoute,
+    IntentService,
 )
 from customer_service.knowledge.chat import DEFAULT_INTENT_MODEL, DashScopeChatClient
 from customer_service.knowledge.embeddings import DEFAULT_BASE_URL
-
 
 DEFAULT_CASES_PATH: Final = (
     Path(__file__).resolve().parents[2]

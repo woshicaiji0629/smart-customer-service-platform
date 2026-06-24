@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any, Final, Protocol, cast
 
-
 logger = logging.getLogger(__name__)
 
 MODEL_TOKEN_PRICES_CNY_PER_1M: Final = {

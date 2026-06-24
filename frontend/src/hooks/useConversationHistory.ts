@@ -32,6 +32,24 @@ export function useConversationHistory(userId: string | null) {
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  function handleRestoreError(
+    requestError: unknown,
+    storedConversationId: string | null,
+  ) {
+    if (
+      storedConversationId &&
+      requestError instanceof ApiError &&
+      requestError.status === 404
+    ) {
+      setConversationId(null);
+      setConversations((current) =>
+        current.filter((item) => item.id !== storedConversationId),
+      );
+      return;
+    }
+    setListError(getErrorMessage(requestError));
+  }
+
   // 在浏览器绘制新用户界面前使旧请求失效，避免旧结果短暂写入新用户状态。
   useLayoutEffect(() => {
     requestVersionRef.current += 1;
@@ -51,6 +69,7 @@ export function useConversationHistory(userId: string | null) {
       setMessages([]);
       setHasLoadedStorage(false);
       setIsLoadingHistory(false);
+      setError(null);
       return;
     }
 
@@ -64,6 +83,7 @@ export function useConversationHistory(userId: string | null) {
     setIsLoadingMore(false);
     setListError(null);
     setMessages([]);
+    setError(null);
 
     async function restoreConversation() {
       let storedConversationId: string | null = null;
@@ -144,24 +164,6 @@ export function useConversationHistory(userId: string | null) {
       setError("无法在浏览器中保存当前会话。");
     }
   }, [conversationId, hasLoadedStorage, userId]);
-
-  function handleRestoreError(
-    requestError: unknown,
-    storedConversationId: string | null,
-  ) {
-    if (
-      storedConversationId &&
-      requestError instanceof ApiError &&
-      requestError.status === 404
-    ) {
-      setConversationId(null);
-      setConversations((current) =>
-        current.filter((item) => item.id !== storedConversationId),
-      );
-      return;
-    }
-    setListError(getErrorMessage(requestError));
-  }
 
   function startNewConversation() {
     setConversationId(null);

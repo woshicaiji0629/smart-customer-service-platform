@@ -12,7 +12,6 @@ from typing import Final
 
 from bs4 import BeautifulSoup
 
-
 DEFAULT_MAX_CHARS: Final = 1_000
 DEFAULT_OVERLAP_CHARS: Final = 150
 FRONT_MATTER_RE: Final = re.compile(r"\A---\s*\n(?P<meta>.*?)\n---\s*\n", re.DOTALL)

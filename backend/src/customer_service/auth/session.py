@@ -10,7 +10,6 @@ from typing import Final, Protocol, cast
 
 from redis.asyncio import Redis
 
-
 SESSION_COOKIE_NAME: Final = "smart_support_session"
 SESSION_KEY_PREFIX: Final = "smart-support:session:"
 DEFAULT_SESSION_TTL_SECONDS: Final = 8 * 60 * 60
@@ -41,7 +40,7 @@ class RedisSessionStore:
             raise ValueError("redis_url 不能为空")
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds 必须大于 0")
-        redis_from_url = cast(Callable[..., Redis], getattr(Redis, "from_url"))
+        redis_from_url = cast(Callable[..., Redis], getattr(Redis, "from_url"))  # noqa: B009
         self._redis = redis_from_url(redis_url, decode_responses=True)
         self._ttl_seconds = ttl_seconds
 

@@ -20,7 +20,6 @@ from script.summarize_conversation_traces import (
     time_range_from_args,
 )
 
-
 CREATED_AT = datetime(2026, 6, 19, 8, 0, tzinfo=UTC)
 UPDATED_AT = datetime(2026, 6, 19, 8, 1, tzinfo=UTC)
 CURRENT_USER = AuthenticatedUser("10001", "模拟用户 Alice")

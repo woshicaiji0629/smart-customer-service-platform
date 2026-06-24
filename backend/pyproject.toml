@@ -20,6 +20,7 @@ dev = [
     "httpx2>=2.4.0",
     "pyright>=1.1.410",
     "pytest",
+    "ruff>=0.15.19",
 ]
 
 [build-system]
@@ -28,3 +29,11 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]

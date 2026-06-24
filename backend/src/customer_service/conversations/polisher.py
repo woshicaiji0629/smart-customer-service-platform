@@ -10,7 +10,6 @@ from customer_service.intents.service import IntentDecision
 from customer_service.knowledge.chat import ChatMessage
 from customer_service.knowledge.rag import RagAnswer
 
-
 CITATION_RE: Final = re.compile(r"\[资料\s*(\d+)\]")
 POLISH_SYSTEM_PROMPT: Final = """你是交易所客服回答润色助手。
 你的任务是把知识库回答改写得更自然、更像客服在直接回复用户。

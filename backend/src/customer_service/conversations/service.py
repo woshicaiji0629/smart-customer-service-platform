@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-import re
 from typing import Protocol
 from uuid import UUID
 
 from sqlalchemy.exc import SQLAlchemyError
 
 from customer_service.business.service import (
+    MOCK_DEPOSIT_SERVICE,
     DepositLookup,
     DepositRecord,
-    MOCK_DEPOSIT_SERVICE,
     WithdrawalLookup,
     WithdrawalRecord,
 )
@@ -29,14 +29,13 @@ from customer_service.conversations.repository import (
     ConversationTurnTraceRecord,
     MessageRecord,
 )
-from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage
 from customer_service.entities.service import extract_entities
 from customer_service.intents.service import (
     IntentDecision,
     IntentHistoryMessage,
     IntentRecognizer,
 )
-
+from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage
 
 MAX_MESSAGE_LENGTH = 4_000
 MAX_HISTORY_MESSAGES = 6

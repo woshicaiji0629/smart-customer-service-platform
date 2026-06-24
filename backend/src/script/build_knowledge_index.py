@@ -16,7 +16,6 @@ from customer_service.knowledge.embeddings import (
 from customer_service.knowledge.indexer import build_index
 from customer_service.knowledge.repository import KnowledgeRepository
 
-
 DEFAULT_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "bitget_support"
 
 

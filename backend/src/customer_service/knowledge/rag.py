@@ -10,7 +10,6 @@ from typing import Final, Literal, Protocol
 from customer_service.knowledge.chat import ChatMessage
 from customer_service.knowledge.repository import SearchResult
 
-
 DEFAULT_RAG_SEARCH_LIMIT: Final = 5
 DEFAULT_RAG_MIN_SCORE: Final = 0.60
 MAX_RAG_HISTORY_MESSAGES: Final = 6

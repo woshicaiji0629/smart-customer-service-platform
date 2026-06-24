@@ -17,7 +17,6 @@ from urllib.parse import urljoin
 import httpx
 from bs4 import BeautifulSoup, Tag
 
-
 BASE_URL: Final = "https://www.bitget.com"
 DEFAULT_OUTPUT_DIR: Final = Path(__file__).resolve().parents[1] / "data" / "bitget_support"
 ARTICLE_PATH_RE: Final = re.compile(r"/zh-CN/support/articles/(\d+)")

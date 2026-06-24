@@ -40,15 +40,14 @@ from customer_service.conversations.service import (
     ConversationService,
     RagUnavailableError,
 )
-from customer_service.knowledge.chat import ChatMessage
-from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage, RagSource
 from customer_service.intents.service import (
     IntentDecision,
     IntentHistoryMessage,
     IntentService,
 )
+from customer_service.knowledge.chat import ChatMessage
+from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage, RagSource
 from customer_service.main import app
-
 
 CONVERSATION_ID = UUID("11111111-1111-1111-1111-111111111111")
 CREATED_AT = datetime(2026, 6, 19, 8, 0, tzinfo=UTC)

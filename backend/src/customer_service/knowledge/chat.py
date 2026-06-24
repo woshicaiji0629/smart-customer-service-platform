@@ -15,7 +15,6 @@ from customer_service.knowledge.usage import (
     build_usage_record,
 )
 
-
 DEFAULT_CHAT_MODEL: Final = "qwen-plus"
 DEFAULT_INTENT_MODEL: Final = "qwen-flash"
 DASHSCOPE_PROVIDER: Final = "dashscope"

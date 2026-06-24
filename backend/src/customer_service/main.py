@@ -24,6 +24,13 @@ from customer_service.conversations.api import router as conversation_router
 from customer_service.conversations.polisher import ConversationAnswerPolisher
 from customer_service.conversations.repository import ConversationRepository
 from customer_service.conversations.service import ConversationService
+from customer_service.intents.service import IntentService
+from customer_service.knowledge.chat import (
+    DEFAULT_CHAT_MODEL,
+    DEFAULT_INTENT_MODEL,
+    ChatCompletionError,
+    DashScopeChatClient,
+)
 from customer_service.knowledge.embeddings import (
     DEFAULT_BASE_URL,
     DEFAULT_DIMENSIONS,
@@ -31,16 +38,9 @@ from customer_service.knowledge.embeddings import (
     DashScopeEmbeddingClient,
     EmbeddingError,
 )
-from customer_service.knowledge.chat import (
-    DEFAULT_CHAT_MODEL,
-    DEFAULT_INTENT_MODEL,
-    ChatCompletionError,
-    DashScopeChatClient,
-)
 from customer_service.knowledge.rag import RagCitationError, RagService
 from customer_service.knowledge.repository import MAX_SEARCH_LIMIT, KnowledgeRepository
 from customer_service.knowledge.service import KnowledgeSearchService
-from customer_service.intents.service import IntentService
 from customer_service.model_usage.api import router as model_usage_router
 from customer_service.model_usage.repository import (
     DatabaseModelUsageSink,
@@ -48,7 +48,6 @@ from customer_service.model_usage.repository import (
 )
 from customer_service.ops.api import router as ops_router
 from customer_service.ops.repository import OpsRepository
-
 
 LOCAL_FRONTEND_ORIGINS = [
     "http://localhost:5173",

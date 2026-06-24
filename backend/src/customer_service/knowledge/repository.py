@@ -18,8 +18,8 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
-    desc,
     delete,
+    desc,
     func,
     or_,
     select,
@@ -29,7 +29,6 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from customer_service.knowledge.documents import KnowledgeChunk, KnowledgeDocument
-
 
 EMBEDDING_DIMENSIONS = 1_024
 MAX_SEARCH_LIMIT = 100

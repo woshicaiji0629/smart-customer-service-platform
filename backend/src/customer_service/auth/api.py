@@ -14,7 +14,6 @@ from customer_service.auth.session import (
     SessionStore,
 )
 
-
 MOCK_USERS: Final = {
     "10001": AuthenticatedUser(user_id="10001", display_name="模拟用户 Alice"),
     "10002": AuthenticatedUser(user_id="10002", display_name="模拟用户 Bob"),

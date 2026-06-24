@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -26,7 +25,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from customer_service.knowledge.usage import ModelUsageRecord
-
 
 logger = logging.getLogger(__name__)
 metadata = MetaData()

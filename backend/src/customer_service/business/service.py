@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final, Literal, Protocol
 
-
 WITHDRAWAL_STATUS_QUERY_TERMS: Final = (
     "状态",
     "进度",

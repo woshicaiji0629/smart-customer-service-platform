@@ -6,7 +6,6 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
-
 WITHDRAWAL_ORDER_ID_RE: Final = re.compile(r"\bWD-\d+\b", re.IGNORECASE)
 DEPOSIT_TXID_RE: Final = re.compile(r"\bTX-\d+\b", re.IGNORECASE)
 COIN_RE: Final = re.compile(r"\b(USDT|USDC|BTC|ETH|BGB)\b", re.IGNORECASE)

@@ -17,7 +17,6 @@ from customer_service.model_usage.repository import (
     ModelUsageSummaryItem,
 )
 
-
 router = APIRouter(prefix="/model-usage", tags=["model-usage"])
 
 

@@ -23,7 +23,6 @@ export function useConversations(userId: string | null) {
   useLayoutEffect(() => {
     setInput("");
     setIsSending(false);
-    history.clearError();
   }, [userId]);
 
   function startNewConversation() {

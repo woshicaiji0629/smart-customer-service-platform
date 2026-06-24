@@ -26,7 +26,6 @@ from customer_service.conversations.repository import (
 from customer_service.conversations.service import ConversationService
 from customer_service.intents.service import IntentService
 
-
 DEFAULT_CASES_PATH: Final = (
     Path(__file__).resolve().parents[2]
     / "evaluation"

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Final, cast
 
 import httpx
@@ -14,7 +13,6 @@ from customer_service.knowledge.usage import (
     ModelUsageSink,
     build_usage_record,
 )
-
 
 DEFAULT_BASE_URL: Final = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 DEFAULT_MODEL: Final = "text-embedding-v4"

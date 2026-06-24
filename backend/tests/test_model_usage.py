@@ -10,7 +10,10 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from customer_service.auth.api import get_session_store
+from customer_service.auth.session import AuthenticatedUser
 from customer_service.knowledge.usage import ModelUsageRecord, build_usage_record
+from customer_service.main import app
 from customer_service.model_usage.repository import (
     DatabaseModelUsageSink,
     ModelUsageRepository,
@@ -18,10 +21,6 @@ from customer_service.model_usage.repository import (
     ModelUsageSummaryItem,
     model_usage_logs,
 )
-from customer_service.auth.api import get_session_store
-from customer_service.auth.session import AuthenticatedUser
-from customer_service.main import app
-
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 START = datetime(2026, 6, 21, tzinfo=UTC)

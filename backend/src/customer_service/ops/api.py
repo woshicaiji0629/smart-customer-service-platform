@@ -17,7 +17,6 @@ from customer_service.ops.repository import (
     TraceSummary,
 )
 
-
 router = APIRouter(prefix="/ops", tags=["ops"])
 
 
