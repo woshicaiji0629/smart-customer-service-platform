@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Annotated
 
@@ -57,7 +57,7 @@ LOCAL_FRONTEND_ORIGINS = [
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.knowledge_search_service = None
     app.state.rag_service = None
     app.state.conversation_service = None

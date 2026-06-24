@@ -46,6 +46,7 @@ IntentName = Literal[
     "trading_question",
     "platform_operation",
     "human_only",
+    "followup_details",
     "out_of_scope",
     "unknown",
 ]
@@ -81,6 +82,7 @@ VALID_INTENTS: Final = frozenset(
         "trading_question",
         "platform_operation",
         "human_only",
+        "followup_details",
         "out_of_scope",
         "unknown",
     }
@@ -430,9 +432,10 @@ def _build_classifier_messages(
 
 
 def _parse_decision(response: str) -> IntentDecision:
-    payload = json.loads(response)
-    if not isinstance(payload, Mapping):
+    raw_payload = json.loads(response)
+    if not isinstance(raw_payload, Mapping):
         raise TypeError("意图识别结果必须是对象")
+    payload = cast(Mapping[str, object], raw_payload)
 
     route = payload.get("route")
     category = payload.get("category")
@@ -452,25 +455,28 @@ def _parse_decision(response: str) -> IntentDecision:
         raise ValueError("confidence 必须在 0 到 1 之间")
     if not isinstance(entities, Mapping):
         raise TypeError("entities 必须是对象")
+    entity_values = cast(Mapping[object, object], entities)
     normalized_entities: dict[str, str] = {}
-    for key, value in entities.items():
+    for key, value in entity_values.items():
         if key not in ALLOWED_ENTITY_KEYS or not isinstance(value, str):
             raise ValueError("entities 包含无效字段")
         normalized_value = value.strip()
         if normalized_value:
             normalized_entities[str(key)] = normalized_value
+    missing_field_values = cast(list[object], missing_fields)
     if not isinstance(missing_fields, list) or not all(
         isinstance(field, str) and field in ALLOWED_ENTITY_KEYS
-        for field in missing_fields
+        for field in missing_field_values
     ):
         raise ValueError("missing_fields 包含无效字段")
+    normalized_missing_fields = cast(list[str], missing_fields)
     return IntentDecision(
         route=cast(IntentRoute, route),
         category=cast(IntentCategory, category),
         intent=cast(IntentName, intent),
         confidence=float(confidence),
         entities=normalized_entities,
-        missing_fields=tuple(missing_fields),
+        missing_fields=tuple(normalized_missing_fields),
         source="model",
     )
 

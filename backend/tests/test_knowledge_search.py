@@ -1,8 +1,9 @@
 import asyncio
+from collections.abc import Sequence
 
 from fastapi.testclient import TestClient
 
-from customer_service.knowledge.repository import SearchResult, _keyword_tokens
+from customer_service.knowledge.repository import SearchResult, keyword_tokens
 from customer_service.knowledge.service import KnowledgeSearchService
 from customer_service.main import app, get_knowledge_search_service
 
@@ -11,8 +12,8 @@ class FakeEmbeddingClient:
     def __init__(self) -> None:
         self.texts: list[str] = []
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        self.texts = texts
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        self.texts = list(texts)
         return [[0.1, 0.2]]
 
 
@@ -80,8 +81,8 @@ def test_search_service_embeds_query_and_searches_repository() -> None:
     embedding_client = FakeEmbeddingClient()
     repository = FakeRepository()
     service = KnowledgeSearchService(
-        repository=repository,  # type: ignore[arg-type]
-        embedding_client=embedding_client,  # type: ignore[arg-type]
+        repository=repository,
+        embedding_client=embedding_client,
     )
 
     results = asyncio.run(service.search("  提现未到账  ", limit=3))
@@ -98,8 +99,8 @@ def test_search_service_passes_normalized_category_to_repository() -> None:
     embedding_client = FakeEmbeddingClient()
     repository = FakeRepository()
     service = KnowledgeSearchService(
-        repository=repository,  # type: ignore[arg-type]
-        embedding_client=embedding_client,  # type: ignore[arg-type]
+        repository=repository,
+        embedding_client=embedding_client,
     )
 
     asyncio.run(service.search("提现未到账", limit=3, category="  提现  "))
@@ -112,8 +113,8 @@ def test_search_service_can_append_keyword_results() -> None:
     embedding_client = FakeEmbeddingClient()
     repository = FakeRepository()
     service = KnowledgeSearchService(
-        repository=repository,  # type: ignore[arg-type]
-        embedding_client=embedding_client,  # type: ignore[arg-type]
+        repository=repository,
+        embedding_client=embedding_client,
     )
 
     results = asyncio.run(
@@ -132,13 +133,13 @@ def test_search_service_can_append_keyword_results() -> None:
 
 
 def test_keyword_tokens_keep_meaningful_terms_and_deduplicate() -> None:
-    assert _keyword_tokens("提现 TxID txid A USDT") == ["提现", "TxID", "USDT"]
+    assert keyword_tokens("提现 TxID txid A USDT") == ["提现", "TxID", "USDT"]
 
 
 def test_search_api_returns_results() -> None:
     service = KnowledgeSearchService(
-        repository=FakeRepository(),  # type: ignore[arg-type]
-        embedding_client=FakeEmbeddingClient(),  # type: ignore[arg-type]
+        repository=FakeRepository(),
+        embedding_client=FakeEmbeddingClient(),
     )
     app.dependency_overrides[get_knowledge_search_service] = lambda: service
     try:
@@ -162,8 +163,8 @@ def test_search_api_returns_results() -> None:
 
 def test_search_api_rejects_blank_query() -> None:
     service = KnowledgeSearchService(
-        repository=FakeRepository(),  # type: ignore[arg-type]
-        embedding_client=FakeEmbeddingClient(),  # type: ignore[arg-type]
+        repository=FakeRepository(),
+        embedding_client=FakeEmbeddingClient(),
     )
     app.dependency_overrides[get_knowledge_search_service] = lambda: service
     try:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -119,7 +119,7 @@ class ConversationRecord:
 class MessageRecord:
     message_id: int
     conversation_id: UUID
-    role: str
+    role: Literal["user", "assistant"]
     content: str
     sources: list[dict[str, str]]
     created_at: datetime
@@ -440,7 +440,7 @@ class ConversationRepository:
         )
 
 
-def _conversation_from_row(row: Mapping[str, Any]) -> ConversationRecord:
+def _conversation_from_row(row: Mapping[Any, Any]) -> ConversationRecord:
     return ConversationRecord(
         conversation_id=row["id"],
         user_id=row["user_id"],
@@ -449,18 +449,18 @@ def _conversation_from_row(row: Mapping[str, Any]) -> ConversationRecord:
     )
 
 
-def _message_from_row(row: Mapping[str, Any]) -> MessageRecord:
+def _message_from_row(row: Mapping[Any, Any]) -> MessageRecord:
     return MessageRecord(
         message_id=row["id"],
         conversation_id=row["conversation_id"],
-        role=row["role"],
+        role=cast(Literal["user", "assistant"], row["role"]),
         content=row["content"],
         sources=[dict(source) for source in row["sources"]],
         created_at=row["created_at"],
     )
 
 
-def _turn_trace_from_row(row: Mapping[str, Any]) -> ConversationTurnTraceRecord:
+def _turn_trace_from_row(row: Mapping[Any, Any]) -> ConversationTurnTraceRecord:
     return ConversationTurnTraceRecord(
         route=row["route"],
         category=row["category"],
@@ -481,3 +481,6 @@ def _conversation_title(first_user_message: str | None) -> str:
     if len(normalized) > CONVERSATION_TITLE_LENGTH:
         return f"{normalized[:CONVERSATION_TITLE_LENGTH]}…"
     return normalized
+
+
+conversation_title = _conversation_title

@@ -1,6 +1,8 @@
 import asyncio
 import os
+from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID, uuid4
 
 import pytest
@@ -13,8 +15,8 @@ from customer_service.auth.api import get_current_user
 from customer_service.auth.session import AuthenticatedUser
 from customer_service.business.service import MOCK_WITHDRAWAL_SERVICE, WithdrawalRecord
 from customer_service.conversations.api import (
-    _decode_cursor,
-    _encode_cursor,
+    decode_cursor,
+    encode_cursor,
     get_conversation_service,
 )
 from customer_service.conversations.polisher import ConversationAnswerPolisher
@@ -29,7 +31,7 @@ from customer_service.conversations.repository import (
     ConversationTurn,
     ConversationTurnTraceRecord,
     MessageRecord,
-    _conversation_title,
+    conversation_title,
     conversation_turn_traces,
     conversations,
     messages,
@@ -38,6 +40,7 @@ from customer_service.conversations.service import (
     ConversationService,
     RagUnavailableError,
 )
+from customer_service.knowledge.chat import ChatMessage
 from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage, RagSource
 from customer_service.intents.service import (
     IntentDecision,
@@ -112,7 +115,7 @@ def _turn() -> ConversationTurn:
 def _message(
     *,
     message_id: int,
-    role: str,
+    role: Literal["user", "assistant"],
     content: str,
     created_at: datetime = UPDATED_AT,
 ) -> MessageRecord:
@@ -201,14 +204,60 @@ class FakeConversationRepository:
             next_cursor=None,
         )
 
-    async def save_turn(self, **values: object) -> ConversationTurn:
-        self.saved = values
+    async def save_turn(
+        self,
+        *,
+        conversation_id: UUID,
+        user_id: str,
+        user_content: str,
+        assistant_content: str,
+        assistant_sources: list[dict[str, str]],
+    ) -> ConversationTurn:
+        self.saved = {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "user_content": user_content,
+            "assistant_content": assistant_content,
+            "assistant_sources": assistant_sources,
+        }
         return _turn()
 
-    async def record_turn_trace(self, **values: object) -> None:
+    async def record_turn_trace(
+        self,
+        *,
+        conversation_id: UUID,
+        user_id: str,
+        user_message_id: int | None,
+        assistant_message_id: int | None,
+        route: str,
+        category: str,
+        intent: str,
+        intent_source: str,
+        confidence: float,
+        entities: dict[str, str],
+        missing_fields: tuple[str, ...],
+        handling_result: str,
+        is_inactive_reset: bool,
+    ) -> None:
         if self.trace_error:
             raise SQLAlchemyError("trace database unavailable")
-        self.traces.append(values)
+        self.traces.append(
+            {
+                "conversation_id": conversation_id,
+                "user_id": user_id,
+                "user_message_id": user_message_id,
+                "assistant_message_id": assistant_message_id,
+                "route": route,
+                "category": category,
+                "intent": intent,
+                "intent_source": intent_source,
+                "confidence": confidence,
+                "entities": entities,
+                "missing_fields": missing_fields,
+                "handling_result": handling_result,
+                "is_inactive_reset": is_inactive_reset,
+            }
+        )
 
     async def get_recent_messages(
         self,
@@ -257,11 +306,11 @@ class FakeRagService:
         self,
         question: str,
         *,
-        history: list[RagHistoryMessage],
+        history: Sequence[RagHistoryMessage] = (),
         category: str | None = None,
     ) -> RagAnswer:
         self.question = question
-        self.history = history
+        self.history = list(history)
         self.category = category
         return RagAnswer(
             answer="请查询 TxID。[资料 1]",
@@ -308,16 +357,16 @@ class FakeAnswerPolisher:
 class FakePolishChatClient:
     def __init__(self, response: str) -> None:
         self.response = response
-        self.requests: list[list[dict[str, str]]] = []
+        self.requests: list[list[ChatMessage]] = []
         self.purposes: list[str] = []
 
     async def complete(
         self,
-        messages: list[dict[str, str]],
+        messages: Sequence[ChatMessage],
         *,
         purpose: str = "chat",
     ) -> str:
-        self.requests.append(messages.copy())
+        self.requests.append(list(messages))
         self.purposes.append(purpose)
         return self.response
 
@@ -338,9 +387,9 @@ class FakeIntentRecognizer:
         self,
         content: str,
         *,
-        history: list[IntentHistoryMessage],
+        history: Sequence[IntentHistoryMessage] = (),
     ) -> IntentDecision:
-        self.history = history
+        self.history = list(history)
         return self.decision
 
 
@@ -382,8 +431,8 @@ def test_conversation_service_saves_complete_turn_after_rag() -> None:
     repository = FakeConversationRepository()
     rag_service = FakeRagService()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(),
         now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
@@ -433,7 +482,7 @@ def test_conversation_service_saves_complete_turn_after_rag() -> None:
 def test_conversation_service_lists_current_users_conversations() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(),
@@ -455,9 +504,9 @@ def test_conversation_service_lists_current_users_conversations() -> None:
 
 
 def test_conversation_title_uses_first_question_and_truncates() -> None:
-    assert _conversation_title(None) == "空白会话"
-    assert _conversation_title("  提现完成\n但钱包没到账  ") == "提现完成 但钱包没到账"
-    assert _conversation_title("问" * 25) == f"{'问' * 24}…"
+    assert conversation_title(None) == "空白会话"
+    assert conversation_title("  提现完成\n但钱包没到账  ") == "提现完成 但钱包没到账"
+    assert conversation_title("问" * 25) == f"{'问' * 24}…"
 
 
 def test_conversation_cursor_round_trip() -> None:
@@ -466,7 +515,7 @@ def test_conversation_cursor_round_trip() -> None:
         conversation_id=CONVERSATION_ID,
     )
 
-    assert _decode_cursor(_encode_cursor(cursor)) == cursor
+    assert decode_cursor(encode_cursor(cursor)) == cursor
 
 
 @pytest.mark.skipif(
@@ -587,8 +636,8 @@ def test_conversation_service_rejects_missing_conversation_before_rag() -> None:
     repository = FakeConversationRepository(exists=False)
     rag_service = FakeRagService()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(),
     )
@@ -608,8 +657,8 @@ def test_conversation_service_rejects_another_users_conversation() -> None:
     repository = FakeConversationRepository()
     rag_service = FakeRagService()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(),
     )
@@ -638,8 +687,8 @@ def test_conversation_service_passes_recent_messages_to_rag() -> None:
     )
     rag_service = FakeRagService()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(),
         now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
@@ -673,8 +722,8 @@ def test_conversation_service_closes_inactive_context_before_rag() -> None:
     )
     rag_service = FakeRagService()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(),
         now=lambda: datetime(2026, 6, 19, 8, 7, tzinfo=UTC),
@@ -694,7 +743,7 @@ def test_conversation_service_closes_inactive_context_before_rag() -> None:
 def test_conversation_service_routes_order_id_to_business_query() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -720,7 +769,7 @@ def test_conversation_service_routes_order_id_to_business_query() -> None:
 def test_conversation_service_requests_order_id_for_platform_hold_query() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -756,8 +805,8 @@ def test_conversation_service_answers_completed_withdrawal_as_onchain_transparen
     repository = FakeConversationRepository()
     rag_service = FakeRagService()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
         now=lambda: datetime(2026, 6, 19, 8, 2, tzinfo=UTC),
@@ -807,7 +856,7 @@ def test_conversation_service_reports_pending_withdrawal_as_platform_processing(
 
     repository = FakeConversationRepository()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=PendingWithdrawalService(),
         intent_service=IntentService(None),
@@ -840,7 +889,7 @@ def test_conversation_service_reports_pending_withdrawal_as_platform_processing(
 def test_conversation_service_requests_txid_for_deposit_query() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -871,8 +920,8 @@ def test_conversation_service_routes_deposit_knowledge_query_to_rag() -> None:
     repository = FakeConversationRepository()
     rag_service = FakeRagService()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
     )
@@ -1091,8 +1140,8 @@ def test_conversation_service_routes_intent_handling_matrix(
     repository = FakeConversationRepository()
     rag_service = FakeRagService()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(decision),
     )
@@ -1113,8 +1162,8 @@ def test_conversation_service_uses_fixed_answer_for_human_support_request() -> N
     repository = FakeConversationRepository()
     rag_service = FakeRagService()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
     )
@@ -1162,8 +1211,8 @@ def test_conversation_service_polishes_identity_failure_rag_answer() -> None:
         missing_fields=(),
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(decision),
         answer_polisher=polisher,
@@ -1200,8 +1249,8 @@ def test_conversation_service_does_not_polish_other_rag_answers() -> None:
         missing_fields=(),
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(decision),
         answer_polisher=polisher,
@@ -1227,8 +1276,8 @@ def test_conversation_service_keeps_original_rag_answer_when_polish_fails() -> N
         missing_fields=(),
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(decision),
         answer_polisher=polisher,
@@ -1244,7 +1293,7 @@ def test_conversation_service_keeps_original_rag_answer_when_polish_fails() -> N
 
 def test_conversation_answer_polisher_uses_chat_client() -> None:
     chat_client = FakePolishChatClient("你的身份证没问题，也可能因为照片不清晰失败。[资料 1]")
-    polisher = ConversationAnswerPolisher(chat_client)  # type: ignore[arg-type]
+    polisher = ConversationAnswerPolisher(chat_client)
     original = RagAnswer(
         answer="身份认证失败的原因包括文件质量低。[资料 1]",
         sources=[
@@ -1284,7 +1333,7 @@ def test_conversation_answer_polisher_uses_chat_client() -> None:
 
 def test_conversation_answer_polisher_keeps_original_when_citation_is_dropped() -> None:
     chat_client = FakePolishChatClient("你的身份证没问题，也可能因为照片不清晰失败。")
-    polisher = ConversationAnswerPolisher(chat_client)  # type: ignore[arg-type]
+    polisher = ConversationAnswerPolisher(chat_client)
     original = RagAnswer(
         answer="身份认证失败的原因包括文件质量低。[资料 1]",
         sources=[
@@ -1319,7 +1368,7 @@ def test_conversation_answer_polisher_keeps_original_when_citation_is_dropped() 
 def test_conversation_service_falls_back_when_human_support_rag_unavailable() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1345,7 +1394,7 @@ def test_conversation_service_falls_back_when_human_support_rag_unavailable() ->
 def test_conversation_service_routes_deposit_txid_to_business_query() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1366,7 +1415,7 @@ def test_conversation_service_routes_deposit_txid_to_business_query() -> None:
 def test_conversation_service_does_not_expose_another_users_deposit() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1398,7 +1447,7 @@ def test_conversation_service_keeps_pending_deposit_context() -> None:
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1426,7 +1475,7 @@ def test_conversation_service_completes_numeric_txid_in_pending_context() -> Non
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1463,7 +1512,7 @@ def test_conversation_service_completes_numeric_txid_from_pending_trace() -> Non
         ],
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1491,7 +1540,7 @@ def test_conversation_service_guides_deposit_followup_when_numeric_txid_not_foun
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1530,7 +1579,7 @@ def test_conversation_service_records_deposit_followup_details_from_trace() -> N
         ],
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1572,7 +1621,7 @@ def test_conversation_service_records_deposit_followup_details() -> None:
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1615,7 +1664,7 @@ def test_conversation_service_drops_pending_context_after_inactivity() -> None:
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1646,7 +1695,7 @@ def test_conversation_service_keeps_pending_withdrawal_context() -> None:
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1673,7 +1722,7 @@ def test_conversation_service_completes_numeric_order_id_in_pending_context() ->
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1708,7 +1757,7 @@ def test_conversation_service_completes_numeric_order_id_from_pending_trace() ->
         ],
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1737,7 +1786,7 @@ def test_conversation_service_does_not_override_explicit_intent_with_pending_con
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1771,7 +1820,7 @@ def test_conversation_service_does_not_override_human_request_with_pending_trace
         ],
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1801,7 +1850,7 @@ def test_conversation_service_does_not_override_human_request_with_pending_trace
 def test_conversation_service_uses_intent_rules_in_production_path() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1816,7 +1865,7 @@ def test_conversation_service_uses_intent_rules_in_production_path() -> None:
 def test_conversation_service_clarifies_unknown_intent_without_model() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1852,7 +1901,7 @@ def test_conversation_service_marks_repeated_unknown_as_manual_fallback_candidat
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1888,7 +1937,7 @@ def test_conversation_service_marks_repeated_human_request_as_manual_fallback_ca
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1915,7 +1964,7 @@ def test_conversation_service_marks_repeated_human_request_as_manual_fallback_ca
 def test_conversation_service_keeps_response_when_trace_write_fails() -> None:
     repository = FakeConversationRepository(trace_error=True)
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1942,7 +1991,7 @@ def test_conversation_service_restores_history_next_action_from_trace() -> None:
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1972,7 +2021,7 @@ def test_conversation_service_does_not_restore_history_next_action_for_completed
         ]
     )
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
@@ -1986,7 +2035,7 @@ def test_conversation_service_does_not_restore_history_next_action_for_completed
 def test_conversation_service_rejects_rag_question_when_unconfigured() -> None:
     repository = FakeConversationRepository()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
+        repository=repository,
         rag_service=None,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=FakeIntentRecognizer(),
@@ -2009,8 +2058,8 @@ def test_conversation_service_does_not_expose_another_users_order() -> None:
     repository = FakeConversationRepository()
     rag_service = FakeRagService()
     service = ConversationService(
-        repository=repository,  # type: ignore[arg-type]
-        rag_service=rag_service,  # type: ignore[arg-type]
+        repository=repository,
+        rag_service=rag_service,
         withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
         intent_service=IntentService(None),
     )
@@ -2154,7 +2203,7 @@ def test_conversation_api_lists_conversations_with_pagination() -> None:
             "updated_at": UPDATED_AT.isoformat().replace("+00:00", "Z"),
         }
     ]
-    assert _decode_cursor(body["next_cursor"]) == ConversationCursor(
+    assert decode_cursor(body["next_cursor"]) == ConversationCursor(
         updated_at=UPDATED_AT,
         conversation_id=CONVERSATION_ID,
     )

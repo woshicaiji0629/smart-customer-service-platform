@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Sequence
 
 from customer_service.intents.service import (
     IntentDecision,
@@ -23,11 +24,11 @@ class FakeClassifier:
 
     async def complete(
         self,
-        messages: list[ChatMessage],
+        messages: Sequence[ChatMessage],
         *,
         purpose: str = "chat",
     ) -> str:
-        self.messages = messages
+        self.messages = list(messages)
         self.purpose = purpose
         return self.response
 

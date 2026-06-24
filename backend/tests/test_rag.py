@@ -1,11 +1,12 @@
 import asyncio
 import json
+from collections.abc import Sequence
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from customer_service.knowledge.chat import DashScopeChatClient
+from customer_service.knowledge.chat import ChatMessage, DashScopeChatClient
 from customer_service.knowledge.usage import ModelUsageRecord
 from customer_service.knowledge.rag import (
     NO_KNOWLEDGE_ANSWER,
@@ -68,18 +69,18 @@ class FakeSearchService:
 
 class FakeChatClient:
     def __init__(self) -> None:
-        self.messages: list[dict[str, str]] = []
-        self.requests: list[list[dict[str, str]]] = []
+        self.messages: list[ChatMessage] = []
+        self.requests: list[list[ChatMessage]] = []
         self.purposes: list[str] = []
 
     async def complete(
         self,
-        messages: list[dict[str, str]],
+        messages: Sequence[ChatMessage],
         *,
         purpose: str = "chat",
     ) -> str:
-        self.messages = messages
-        self.requests.append(messages.copy())
+        self.messages = list(messages)
+        self.requests.append(list(messages))
         self.purposes.append(purpose)
         return "请先使用 TxID 查询链上状态。[资料 1]"
 
@@ -87,16 +88,16 @@ class FakeChatClient:
 class SequencedChatClient:
     def __init__(self, responses: list[str]) -> None:
         self._responses = iter(responses)
-        self.requests: list[list[dict[str, str]]] = []
+        self.requests: list[list[ChatMessage]] = []
         self.purposes: list[str] = []
 
     async def complete(
         self,
-        messages: list[dict[str, str]],
+        messages: Sequence[ChatMessage],
         *,
         purpose: str = "chat",
     ) -> str:
-        self.requests.append(messages.copy())
+        self.requests.append(list(messages))
         self.purposes.append(purpose)
         return next(self._responses)
 
@@ -127,10 +128,10 @@ def test_chat_client_calls_compatible_api() -> None:
         )
 
     async def run() -> str:
-        client = DashScopeChatClient(api_key="test", usage_sink=sink)
-        await client._client.aclose()
-        client._client = httpx.AsyncClient(
+        client = DashScopeChatClient(
+            api_key="test",
             base_url="https://example.com/v1/",
+            usage_sink=sink,
             transport=httpx.MockTransport(handler),
         )
         async with client:
@@ -171,12 +172,9 @@ def test_chat_client_requests_json_mode() -> None:
     async def run() -> str:
         client = DashScopeChatClient(
             api_key="test",
+            base_url="https://example.com/v1/",
             model="qwen-flash",
             json_mode=True,
-        )
-        await client._client.aclose()
-        client._client = httpx.AsyncClient(
-            base_url="https://example.com/v1/",
             transport=httpx.MockTransport(handler),
         )
         async with client:
@@ -198,8 +196,8 @@ def test_rag_service_builds_grounded_prompt_and_deduplicates_sources() -> None:
     search_service = FakeSearchService()
     chat_client = FakeChatClient()
     service = RagService(
-        search_service=search_service,  # type: ignore[arg-type]
-        chat_client=chat_client,  # type: ignore[arg-type]
+        search_service=search_service,
+        chat_client=chat_client,
     )
 
     result = asyncio.run(service.answer("  提现已完成但没有到账  "))
@@ -242,8 +240,8 @@ def test_rag_service_passes_category_to_search_service() -> None:
     search_service = FakeSearchService()
     chat_client = FakeChatClient()
     service = RagService(
-        search_service=search_service,  # type: ignore[arg-type]
-        chat_client=chat_client,  # type: ignore[arg-type]
+        search_service=search_service,
+        chat_client=chat_client,
     )
 
     asyncio.run(service.answer("身份认证失败", category="身份认证"))
@@ -264,8 +262,8 @@ def test_rag_service_skips_chat_when_search_has_no_results() -> None:
 
     chat_client = FakeChatClient()
     service = RagService(
-        search_service=EmptySearchService(),  # type: ignore[arg-type]
-        chat_client=chat_client,  # type: ignore[arg-type]
+        search_service=EmptySearchService(),
+        chat_client=chat_client,
     )
 
     result = asyncio.run(service.answer("知识库之外的问题"))
@@ -296,8 +294,8 @@ def test_rag_service_skips_chat_when_results_are_below_threshold() -> None:
 
     chat_client = FakeChatClient()
     service = RagService(
-        search_service=LowScoreSearchService(),  # type: ignore[arg-type]
-        chat_client=chat_client,  # type: ignore[arg-type]
+        search_service=LowScoreSearchService(),
+        chat_client=chat_client,
     )
 
     result = asyncio.run(service.answer("知识库之外的问题"))
@@ -315,8 +313,8 @@ def test_rag_service_retries_answer_with_invalid_citation() -> None:
         ]
     )
     service = RagService(
-        search_service=FakeSearchService(),  # type: ignore[arg-type]
-        chat_client=chat_client,  # type: ignore[arg-type]
+        search_service=FakeSearchService(),
+        chat_client=chat_client,
     )
 
     result = asyncio.run(service.answer("提现没有到账"))
@@ -341,8 +339,8 @@ def test_rag_service_rewrites_follow_up_with_recent_sanitized_history() -> None:
     )
     search_service = FakeSearchService()
     service = RagService(
-        search_service=search_service,  # type: ignore[arg-type]
-        chat_client=chat_client,  # type: ignore[arg-type]
+        search_service=search_service,
+        chat_client=chat_client,
     )
     history = [
         RagHistoryMessage(role="user", content=f"旧问题 {index}")
@@ -389,8 +387,8 @@ def test_rag_service_uses_grounding_review_as_final_answer() -> None:
         ]
     )
     service = RagService(
-        search_service=FakeSearchService(),  # type: ignore[arg-type]
-        chat_client=chat_client,  # type: ignore[arg-type]
+        search_service=FakeSearchService(),
+        chat_client=chat_client,
     )
 
     result = asyncio.run(service.answer("APT 提现完成但没有到账"))
@@ -411,8 +409,8 @@ def test_rag_service_rejects_invalid_citation_from_grounding_review() -> None:
         ]
     )
     service = RagService(
-        search_service=FakeSearchService(),  # type: ignore[arg-type]
-        chat_client=chat_client,  # type: ignore[arg-type]
+        search_service=FakeSearchService(),
+        chat_client=chat_client,
     )
 
     with pytest.raises(RagCitationError, match="审核后回答包含无效资料编号: 3"):
@@ -429,8 +427,8 @@ def test_rag_service_rejects_invalid_citation_after_retry() -> None:
         ]
     )
     service = RagService(
-        search_service=FakeSearchService(),  # type: ignore[arg-type]
-        chat_client=chat_client,  # type: ignore[arg-type]
+        search_service=FakeSearchService(),
+        chat_client=chat_client,
     )
 
     with pytest.raises(RagCitationError, match="无效资料编号: 4"):

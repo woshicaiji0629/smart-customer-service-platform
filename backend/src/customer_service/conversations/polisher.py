@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import re
-from typing import Final
+from collections.abc import Sequence
+from typing import Final, Protocol
 
 from customer_service.intents.service import IntentDecision
-from customer_service.knowledge.chat import ChatMessage, DashScopeChatClient
+from customer_service.knowledge.chat import ChatMessage
 from customer_service.knowledge.rag import RagAnswer
 
 
@@ -22,8 +23,17 @@ POLISH_SYSTEM_PROMPT: Final = """你是交易所客服回答润色助手。
 只输出润色后的最终回答，不要解释润色过程。"""
 
 
+class PolishChatClient(Protocol):
+    async def complete(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        purpose: str = "chat",
+    ) -> str: ...
+
+
 class ConversationAnswerPolisher:
-    def __init__(self, chat_client: DashScopeChatClient) -> None:
+    def __init__(self, chat_client: PolishChatClient) -> None:
         self._chat_client = chat_client
 
     async def polish(

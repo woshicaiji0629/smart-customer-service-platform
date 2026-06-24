@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any, cast
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -69,7 +70,7 @@ knowledge_chunks = Table(
     Column("content_hash", String(64), nullable=False),
     Column("embedding_model", String, nullable=False),
     Column("embedding_dimensions", Integer, nullable=False),
-    Column("embedding", Vector(EMBEDDING_DIMENSIONS), nullable=False),
+    Column("embedding", cast(Any, Vector)(EMBEDDING_DIMENSIONS), nullable=False),
     UniqueConstraint("article_id", "chunk_index"),
 )
 
@@ -208,7 +209,8 @@ class KnowledgeRepository:
             raise ValueError("limit 必须大于 0")
         if limit > MAX_SEARCH_LIMIT:
             raise ValueError(f"limit 不能超过 {MAX_SEARCH_LIMIT}")
-        distance = knowledge_chunks.c.embedding.cosine_distance(query_vector)
+        embedding_column = cast(Any, knowledge_chunks.c.embedding)
+        distance = embedding_column.cosine_distance(query_vector)
         statement = (
             select(
                 knowledge_chunks.c.article_id,
@@ -248,15 +250,15 @@ class KnowledgeRepository:
         limit: int = 5,
         category: str | None = None,
     ) -> list[SearchResult]:
-        tokens = _keyword_tokens(query)
+        tokens = keyword_tokens(query)
         if not tokens:
             return []
         if limit <= 0:
             raise ValueError("limit 必须大于 0")
         if limit > MAX_SEARCH_LIMIT:
             raise ValueError(f"limit 不能超过 {MAX_SEARCH_LIMIT}")
-        conditions = []
-        score_parts = []
+        conditions: list[Any] = []
+        score_parts: list[Any] = []
         for token in tokens:
             pattern = f"%{token}%"
             title_match = knowledge_documents.c.title.ilike(pattern)
@@ -270,7 +272,7 @@ class KnowledgeRepository:
                     func.coalesce(content_match.cast(Integer), 0),
                 ]
             )
-        score = sum(score_parts)
+        score = cast(Any, sum(score_parts))
         statement = (
             select(
                 knowledge_chunks.c.article_id,
@@ -309,7 +311,7 @@ class KnowledgeRepository:
             ]
 
 
-def _keyword_tokens(query: str) -> list[str]:
+def keyword_tokens(query: str) -> list[str]:
     seen: set[str] = set()
     tokens: list[str] = []
     for token in KEYWORD_RE.findall(query):
@@ -322,3 +324,6 @@ def _keyword_tokens(query: str) -> list[str]:
         seen.add(key)
         tokens.append(normalized)
     return tokens
+
+
+_keyword_tokens = keyword_tokens

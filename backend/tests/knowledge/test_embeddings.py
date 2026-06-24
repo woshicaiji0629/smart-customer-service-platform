@@ -37,12 +37,9 @@ def test_embed_batches_and_orders_vectors() -> None:
     async def run() -> list[list[float]]:
         client = DashScopeEmbeddingClient(
             api_key="test",
+            base_url="https://example.com/v1/",
             dimensions=2,
             usage_sink=sink,
-        )
-        await client._client.aclose()
-        client._client = httpx.AsyncClient(
-            base_url="https://example.com/v1/",
             transport=httpx.MockTransport(handler),
         )
         async with client:
@@ -85,14 +82,36 @@ def test_embed_rejects_wrong_dimensions() -> None:
     )
 
     async def run() -> None:
-        client = DashScopeEmbeddingClient(api_key="test", dimensions=2)
-        await client._client.aclose()
-        client._client = httpx.AsyncClient(
+        client = DashScopeEmbeddingClient(
+            api_key="test",
             base_url="https://example.com/v1/",
+            dimensions=2,
             transport=transport,
         )
         async with client:
             with pytest.raises(EmbeddingError, match="维度"):
+                await client.embed(["text"])
+
+    asyncio.run(run())
+
+
+def test_embed_rejects_non_numeric_vector_items() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={"data": [{"index": 0, "embedding": [1.0, "bad"]}]},
+        )
+    )
+
+    async def run() -> None:
+        client = DashScopeEmbeddingClient(
+            api_key="test",
+            base_url="https://example.com/v1/",
+            dimensions=2,
+            transport=transport,
+        )
+        async with client:
+            with pytest.raises(EmbeddingError, match="格式"):
                 await client.embed(["text"])
 
     asyncio.run(run())
@@ -107,10 +126,10 @@ def test_embed_rejects_non_contiguous_indices() -> None:
     )
 
     async def run() -> None:
-        client = DashScopeEmbeddingClient(api_key="test", dimensions=2)
-        await client._client.aclose()
-        client._client = httpx.AsyncClient(
+        client = DashScopeEmbeddingClient(
+            api_key="test",
             base_url="https://example.com/v1/",
+            dimensions=2,
             transport=transport,
         )
         async with client:

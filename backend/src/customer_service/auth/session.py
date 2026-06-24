@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import secrets
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from typing import Final, Protocol
+from typing import Final, Protocol, cast
 
 from redis.asyncio import Redis
 
@@ -40,7 +41,8 @@ class RedisSessionStore:
             raise ValueError("redis_url 不能为空")
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds 必须大于 0")
-        self._redis = Redis.from_url(redis_url, decode_responses=True)
+        redis_from_url = cast(Callable[..., Redis], getattr(Redis, "from_url"))
+        self._redis = redis_from_url(redis_url, decode_responses=True)
         self._ttl_seconds = ttl_seconds
 
     async def create(self, user: AuthenticatedUser) -> str:

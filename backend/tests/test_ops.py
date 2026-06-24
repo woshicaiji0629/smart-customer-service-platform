@@ -1,3 +1,4 @@
+from argparse import Namespace
 from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
@@ -14,9 +15,9 @@ from customer_service.ops.repository import (
 )
 from script.summarize_conversation_traces import (
     DEFAULT_SAMPLE_HANDLING_RESULTS,
-    _sample_candidate,
-    _sample_output,
-    _time_range_from_args,
+    sample_candidate,
+    sample_output,
+    time_range_from_args,
 )
 
 
@@ -174,29 +175,29 @@ def test_ops_api_rejects_invalid_trace_summary_range() -> None:
 
 
 def test_trace_summary_script_validates_time_range_args() -> None:
-    class Args:
-        hours = 24
-        start_ts = int(CREATED_AT.timestamp())
-        end_ts = int(UPDATED_AT.timestamp())
-        limit = 20
-        sample_limit = 20
-        sample_format = "candidate"
-
-    start, end = _time_range_from_args(Args())
+    args = Namespace(
+        hours=24,
+        start_ts=int(CREATED_AT.timestamp()),
+        end_ts=int(UPDATED_AT.timestamp()),
+        limit=20,
+        sample_limit=20,
+        sample_format="candidate",
+    )
+    start, end = time_range_from_args(args)
 
     assert start == CREATED_AT
     assert end == UPDATED_AT
 
-    class PartialArgs:
-        hours = 24
-        start_ts = int(CREATED_AT.timestamp())
-        end_ts = None
-        limit = 20
-        sample_limit = 20
-        sample_format = "candidate"
-
+    partial_args = Namespace(
+        hours=24,
+        start_ts=int(CREATED_AT.timestamp()),
+        end_ts=None,
+        limit=20,
+        sample_limit=20,
+        sample_format="candidate",
+    )
     try:
-        _time_range_from_args(PartialArgs())
+        time_range_from_args(partial_args)
     except ValueError as exc:
         assert "同时提供" in str(exc)
     else:
@@ -217,7 +218,7 @@ def test_trace_sample_candidate_serializes_evaluation_context() -> None:
         created_at=CREATED_AT,
     )
 
-    assert _sample_candidate(sample) == {
+    assert sample_candidate(sample) == {
         "query": "还是不行",
         "observed_route": "unknown",
         "observed_category": "other",
@@ -245,7 +246,7 @@ def test_trace_sample_output_can_render_intent_case_draft() -> None:
         created_at=CREATED_AT,
     )
 
-    assert _sample_output(sample, "intent-case-draft") == {
+    assert sample_output(sample, "intent-case-draft") == {
         "id": "trace_manual_fallback_candidate_20260619080000_7665209c",
         "query": "还是不行",
         "expected_route": "unknown",

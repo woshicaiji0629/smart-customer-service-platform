@@ -212,5 +212,5 @@ def _count_by_statement(column: Column[Any], filters: tuple[Any, ...]) -> Any:
     )
 
 
-def _trace_count_from_row(row: Mapping[str, Any]) -> TraceCount:
+def _trace_count_from_row(row: Mapping[Any, Any]) -> TraceCount:
     return TraceCount(key=row["key"], count=int(row["count"]))

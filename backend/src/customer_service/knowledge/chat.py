@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from typing import Final, Literal, TypedDict
+from typing import Final, Literal, TypedDict, cast
 
 import httpx
 
@@ -40,6 +40,7 @@ class DashScopeChatClient:
         timeout: float = 60.0,
         json_mode: bool = False,
         usage_sink: ModelUsageSink | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("api_key 不能为空")
@@ -52,6 +53,7 @@ class DashScopeChatClient:
             base_url=base_url.rstrip("/") + "/",
             timeout=httpx.Timeout(timeout),
             headers={"Authorization": f"Bearer {api_key}"},
+            transport=transport,
         )
 
     async def __aenter__(self) -> DashScopeChatClient:
@@ -95,8 +97,22 @@ class DashScopeChatClient:
             )
 
         try:
-            payload = response.json()
-            content = payload["choices"][0]["message"]["content"]
+            raw_payload = response.json()
+            if not isinstance(raw_payload, dict):
+                raise TypeError
+            payload = cast(dict[str, object], raw_payload)
+            choices = payload["choices"]
+            if not isinstance(choices, list):
+                raise TypeError
+            choice = cast(list[object], choices)[0]
+            if not isinstance(choice, dict):
+                raise TypeError
+            choice_values = cast(dict[str, object], choice)
+            message = choice_values["message"]
+            if not isinstance(message, dict):
+                raise TypeError
+            message_values = cast(dict[str, object], message)
+            content = message_values["content"]
         except (IndexError, KeyError, TypeError, ValueError) as exc:
             raise ChatCompletionError("大模型响应格式错误") from exc
         if not isinstance(content, str) or not content.strip():

@@ -5,11 +5,10 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final, Literal
+from typing import Final, Literal, Protocol
 
-from customer_service.knowledge.chat import ChatMessage, DashScopeChatClient
+from customer_service.knowledge.chat import ChatMessage
 from customer_service.knowledge.repository import SearchResult
-from customer_service.knowledge.service import KnowledgeSearchService
 
 
 DEFAULT_RAG_SEARCH_LIMIT: Final = 5
@@ -70,12 +69,31 @@ class RagAnswer:
     sources: list[RagSource]
 
 
+class RagSearchService(Protocol):
+    async def search(
+        self,
+        query: str,
+        *,
+        limit: int = DEFAULT_RAG_SEARCH_LIMIT,
+        category: str | None = None,
+    ) -> list[SearchResult]: ...
+
+
+class RagChatClient(Protocol):
+    async def complete(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        purpose: str = "chat",
+    ) -> str: ...
+
+
 class RagService:
     def __init__(
         self,
         *,
-        search_service: KnowledgeSearchService,
-        chat_client: DashScopeChatClient,
+        search_service: RagSearchService,
+        chat_client: RagChatClient,
         min_score: float = DEFAULT_RAG_MIN_SCORE,
     ) -> None:
         if not -1 <= min_score <= 1:

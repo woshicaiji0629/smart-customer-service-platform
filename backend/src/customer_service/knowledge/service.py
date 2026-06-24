@@ -1,15 +1,39 @@
 """Application service for semantic knowledge search."""
 
-from customer_service.knowledge.embeddings import DashScopeEmbeddingClient
-from customer_service.knowledge.repository import KnowledgeRepository, SearchResult
+from collections.abc import Sequence
+from typing import Protocol
+
+from customer_service.knowledge.repository import SearchResult
+
+
+class KnowledgeRepositoryLike(Protocol):
+    async def search(
+        self,
+        query_vector: list[float],
+        *,
+        limit: int = 5,
+        category: str | None = None,
+    ) -> list[SearchResult]: ...
+
+    async def keyword_search(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+        category: str | None = None,
+    ) -> list[SearchResult]: ...
+
+
+class EmbeddingClientLike(Protocol):
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
 
 
 class KnowledgeSearchService:
     def __init__(
         self,
         *,
-        repository: KnowledgeRepository,
-        embedding_client: DashScopeEmbeddingClient,
+        repository: KnowledgeRepositoryLike,
+        embedding_client: EmbeddingClientLike,
     ) -> None:
         self._repository = repository
         self._embedding_client = embedding_client

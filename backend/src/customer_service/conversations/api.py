@@ -239,7 +239,9 @@ def _message_response(
         sources=[SourceSnapshotResponse(**source) for source in record.sources],
         created_at=record.created_at,
         next_action=(
-            NextActionResponse(**next_action) if next_action is not None else None
+            NextActionResponse.model_validate(next_action)
+            if next_action is not None
+            else None
         ),
     )
 
@@ -294,6 +296,10 @@ def _decode_cursor(value: str) -> ConversationCursor:
         updated_at=updated_at,
         conversation_id=conversation_id,
     )
+
+
+encode_cursor = _encode_cursor
+decode_cursor = _decode_cursor
 
 
 def _turn_response(turn: ConversationTurn) -> ConversationTurnResponse:

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from typing import Final
+from collections.abc import Mapping
+from typing import Final, cast
 
 import httpx
 
@@ -36,6 +37,7 @@ class DashScopeEmbeddingClient:
         dimensions: int = DEFAULT_DIMENSIONS,
         timeout: float = 30.0,
         usage_sink: ModelUsageSink | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("api_key 不能为空")
@@ -48,6 +50,7 @@ class DashScopeEmbeddingClient:
             base_url=base_url.rstrip("/") + "/",
             timeout=httpx.Timeout(timeout),
             headers={"Authorization": f"Bearer {api_key}"},
+            transport=transport,
         )
 
     async def __aenter__(self) -> DashScopeEmbeddingClient:
@@ -92,10 +95,30 @@ class DashScopeEmbeddingClient:
             )
 
         try:
-            payload = response.json()
-            items = sorted(payload["data"], key=lambda item: item["index"])
-            indices = [item["index"] for item in items]
-            vectors = [item["embedding"] for item in items]
+            raw_payload = response.json()
+            if not isinstance(raw_payload, dict):
+                raise TypeError
+            payload = cast(dict[str, object], raw_payload)
+            data = payload["data"]
+            if not isinstance(data, list):
+                raise TypeError
+            parsed_items: list[tuple[int, list[float]]] = []
+            for item in cast(list[object], data):
+                if not isinstance(item, Mapping):
+                    raise TypeError
+                item_values = cast(Mapping[str, object], item)
+                index = item_values["index"]
+                embedding = item_values["embedding"]
+                if isinstance(index, bool) or not isinstance(index, int):
+                    raise TypeError
+                if not isinstance(embedding, list):
+                    raise TypeError
+                parsed_items.append(
+                    (index, _parse_embedding_vector(cast(list[object], embedding)))
+                )
+            parsed_items.sort(key=lambda item: item[0])
+            indices = [index for index, _ in parsed_items]
+            vectors = [vector for _, vector in parsed_items]
         except (KeyError, TypeError, ValueError) as exc:
             raise EmbeddingError("Embedding 响应格式错误") from exc
         if len(vectors) != len(texts):
@@ -105,8 +128,7 @@ class DashScopeEmbeddingClient:
         if indices != list(range(len(texts))):
             raise EmbeddingError("Embedding 响应索引不连续")
         if any(
-            not isinstance(vector, list) or len(vector) != self.dimensions
-            for vector in vectors
+            len(vector) != self.dimensions for vector in vectors
         ):
             raise EmbeddingError(f"Embedding 维度不是预期的 {self.dimensions}")
         await self._usage_sink.record(
@@ -118,3 +140,12 @@ class DashScopeEmbeddingClient:
             )
         )
         return vectors
+
+
+def _parse_embedding_vector(value: list[object]) -> list[float]:
+    vector: list[float] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
+            raise TypeError
+        vector.append(float(item))
+    return vector

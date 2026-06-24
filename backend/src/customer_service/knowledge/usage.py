@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, cast
 
 
 logger = logging.getLogger(__name__)
@@ -42,8 +43,8 @@ def build_usage_record(
     purpose: str,
     payload: dict[str, Any],
 ) -> ModelUsageRecord:
-    usage = payload.get("usage")
-    if not isinstance(usage, dict):
+    raw_usage = payload.get("usage")
+    if not isinstance(raw_usage, Mapping):
         return ModelUsageRecord(
             provider=provider,
             model=model,
@@ -54,6 +55,7 @@ def build_usage_record(
             estimated_cost_cny=None,
         )
 
+    usage = cast(Mapping[str, object], raw_usage)
     prompt_tokens = _int_or_none(
         usage.get(
             "prompt_tokens",

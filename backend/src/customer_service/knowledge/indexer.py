@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from customer_service.knowledge.documents import (
+    KnowledgeChunk,
     KnowledgeDocument,
     chunk_document,
     parse_document,
 )
-from customer_service.knowledge.embeddings import DashScopeEmbeddingClient
-from customer_service.knowledge.repository import IndexState, KnowledgeRepository
+from customer_service.knowledge.repository import IndexState
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,12 +24,34 @@ class IndexResult:
     chunks: int
 
 
+class IndexRepository(Protocol):
+    async def get_states(self, article_ids: list[str]) -> dict[str, IndexState]: ...
+
+    async def replace_document(
+        self,
+        *,
+        source: str,
+        document: KnowledgeDocument,
+        chunks: list[KnowledgeChunk],
+        vectors: list[list[float]],
+        embedding_model: str,
+        embedding_dimensions: int,
+    ) -> None: ...
+
+
+class IndexEmbeddingClient(Protocol):
+    model: str
+    dimensions: int
+
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
+
+
 async def build_index(
     *,
     data_dir: Path,
     source: str,
-    repository: KnowledgeRepository,
-    embedding_client: DashScopeEmbeddingClient,
+    repository: IndexRepository,
+    embedding_client: IndexEmbeddingClient,
     limit: int | None = None,
 ) -> IndexResult:
     if not data_dir.is_dir():

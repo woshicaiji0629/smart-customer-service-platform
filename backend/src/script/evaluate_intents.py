@@ -244,7 +244,10 @@ def _accuracy(correct: int, total: int) -> float:
 
 def load_cases(path: Path) -> list[IntentEvaluationCase]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        raw_payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw_payload, dict):
+            raise TypeError
+        payload = cast(dict[str, object], raw_payload)
         raw_cases = payload["cases"]
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
         raise ValueError(f"无法读取意图评估数据: {path}") from exc
@@ -253,16 +256,20 @@ def load_cases(path: Path) -> list[IntentEvaluationCase]:
 
     cases: list[IntentEvaluationCase] = []
     seen_ids: set[str] = set()
-    for raw_case in raw_cases:
+    for raw_case in cast(list[object], raw_cases):
         if not isinstance(raw_case, dict):
             raise ValueError("意图评估用例必须是对象")
-        case_id = raw_case.get("id")
-        query = raw_case.get("query")
-        route = raw_case.get("expected_route")
-        category = raw_case.get("expected_category", raw_case.get("expected_topic"))
-        intent = raw_case.get("expected_intent")
-        expected_entities = raw_case.get("expected_entities")
-        expected_missing_fields = raw_case.get("expected_missing_fields")
+        case_values = cast(dict[str, object], raw_case)
+        case_id = case_values.get("id")
+        query = case_values.get("query")
+        route = case_values.get("expected_route")
+        category = case_values.get(
+            "expected_category",
+            case_values.get("expected_topic"),
+        )
+        intent = case_values.get("expected_intent")
+        expected_entities = case_values.get("expected_entities")
+        expected_missing_fields = case_values.get("expected_missing_fields")
         if not isinstance(case_id, str) or not case_id or case_id in seen_ids:
             raise ValueError(f"意图评估用例 id 无效或重复: {case_id!r}")
         if not isinstance(query, str) or not query.strip():
@@ -305,7 +312,7 @@ def _parse_expected_entities(
     if not isinstance(value, dict):
         raise ValueError(f"意图评估 expected_entities 无效: {case_id}")
     normalized: dict[str, str] = {}
-    for key, entity_value in value.items():
+    for key, entity_value in cast(dict[object, object], value).items():
         if key not in ALLOWED_ENTITY_KEYS or not isinstance(entity_value, str):
             raise ValueError(f"意图评估 expected_entities 无效: {case_id}")
         stripped = entity_value.strip()
@@ -320,12 +327,15 @@ def _parse_expected_missing_fields(
 ) -> tuple[str, ...] | None:
     if value is None:
         return None
-    if not isinstance(value, list) or not all(
+    if not isinstance(value, list):
+        raise ValueError(f"意图评估 expected_missing_fields 无效: {case_id}")
+    raw_fields = cast(list[object], value)
+    if not all(
         isinstance(field, str) and field in ALLOWED_ENTITY_KEYS
-        for field in value
+        for field in raw_fields
     ):
         raise ValueError(f"意图评估 expected_missing_fields 无效: {case_id}")
-    return tuple(value)
+    return tuple(cast(list[str], value))
 
 
 def _required_env(name: str) -> str:

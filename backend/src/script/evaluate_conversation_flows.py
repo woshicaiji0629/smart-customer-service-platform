@@ -8,7 +8,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal, cast
 from uuid import UUID
 
 from customer_service.business.service import MOCK_WITHDRAWAL_SERVICE
@@ -106,7 +106,8 @@ class ConversationFlowTurnResult:
         raw_missing_fields = self.trace.get("missing_fields")
         if not isinstance(raw_missing_fields, (list, tuple)):
             return False
-        return tuple(raw_missing_fields) == expected.missing_fields
+        missing_fields = cast(list[object] | tuple[object, ...], raw_missing_fields)
+        return tuple(missing_fields) == expected.missing_fields
 
 
 class MemoryConversationRepository:
@@ -213,7 +214,7 @@ class MemoryConversationRepository:
         self,
         *,
         conversation_id: UUID,
-        role: str,
+        role: Literal["user", "assistant"],
         content: str,
         sources: list[dict[str, str]],
     ) -> MessageRecord:
@@ -248,7 +249,7 @@ async def evaluate_cases(
     for case in cases:
         repository = MemoryConversationRepository()
         service = ConversationService(
-            repository=repository,  # type: ignore[arg-type]
+            repository=repository,
             rag_service=None,
             withdrawal_service=MOCK_WITHDRAWAL_SERVICE,
             intent_service=IntentService(None),
@@ -278,7 +279,10 @@ async def evaluate_cases(
 
 def load_cases(path: Path) -> list[ConversationFlowCase]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        raw_payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw_payload, dict):
+            raise TypeError
+        payload = cast(dict[str, object], raw_payload)
         raw_cases = payload["cases"]
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
         raise ValueError(f"无法读取会话流评估数据: {path}") from exc
@@ -287,12 +291,13 @@ def load_cases(path: Path) -> list[ConversationFlowCase]:
 
     cases: list[ConversationFlowCase] = []
     seen_ids: set[str] = set()
-    for raw_case in raw_cases:
+    for raw_case in cast(list[object], raw_cases):
         if not isinstance(raw_case, dict):
             raise ValueError("会话流评估用例必须是对象")
-        case_id = raw_case.get("id")
-        user_id = raw_case.get("user_id", DEFAULT_USER_ID)
-        raw_turns = raw_case.get("turns")
+        case_values = cast(dict[str, object], raw_case)
+        case_id = case_values.get("id")
+        user_id = case_values.get("user_id", DEFAULT_USER_ID)
+        raw_turns = case_values.get("turns")
         if not isinstance(case_id, str) or not case_id or case_id in seen_ids:
             raise ValueError(f"会话流评估用例 id 无效或重复: {case_id!r}")
         if not isinstance(user_id, str) or not user_id.strip():
@@ -304,7 +309,10 @@ def load_cases(path: Path) -> list[ConversationFlowCase]:
             ConversationFlowCase(
                 case_id=case_id,
                 user_id=user_id.strip(),
-                turns=tuple(_parse_turn(case_id, raw_turn) for raw_turn in raw_turns),
+                turns=tuple(
+                    _parse_turn(case_id, raw_turn)
+                    for raw_turn in cast(list[object], raw_turns)
+                ),
             )
         )
     return cases
@@ -313,10 +321,11 @@ def load_cases(path: Path) -> list[ConversationFlowCase]:
 def _parse_turn(case_id: str, raw_turn: object) -> ConversationFlowTurnCase:
     if not isinstance(raw_turn, dict):
         raise ValueError(f"会话流评估 turn 无效: {case_id}")
-    user = raw_turn.get("user")
-    expected_assistant_contains = raw_turn.get("expected_assistant_contains")
-    expected_next_action_state = raw_turn.get("expected_next_action_state")
-    raw_trace = raw_turn.get("expected_trace")
+    turn_values = cast(dict[str, object], raw_turn)
+    user = turn_values.get("user")
+    expected_assistant_contains = turn_values.get("expected_assistant_contains")
+    expected_next_action_state = turn_values.get("expected_next_action_state")
+    raw_trace = turn_values.get("expected_trace")
     if not isinstance(user, str) or not user.strip():
         raise ValueError(f"会话流评估 user 无效: {case_id}")
     if (
@@ -335,11 +344,11 @@ def _parse_turn(case_id: str, raw_turn: object) -> ConversationFlowTurnCase:
         user=user.strip(),
         expected_assistant_contains=expected_assistant_contains,
         expected_next_action_state=expected_next_action_state,
-        expected_trace=_parse_expected_trace(case_id, raw_trace),
+        expected_trace=_parse_expected_trace(case_id, cast(dict[str, object], raw_trace)),
     )
 
 
-def _parse_expected_trace(case_id: str, raw_trace: dict[object, object]) -> ExpectedTrace:
+def _parse_expected_trace(case_id: str, raw_trace: dict[str, object]) -> ExpectedTrace:
     values = {
         key: raw_trace.get(key)
         for key in ("route", "category", "intent", "handling_result")
@@ -368,7 +377,7 @@ def _parse_expected_entities(
     if not isinstance(raw_entities, dict):
         raise ValueError(f"会话流评估 expected_trace.entities 无效: {case_id}")
     entities: dict[str, str] = {}
-    for key, value in raw_entities.items():
+    for key, value in cast(dict[object, object], raw_entities).items():
         if not isinstance(key, str) or not isinstance(value, str):
             raise ValueError(f"会话流评估 expected_trace.entities 无效: {case_id}")
         entities[key] = value
@@ -384,7 +393,7 @@ def _parse_expected_missing_fields(
     if not isinstance(raw_missing_fields, list):
         raise ValueError(f"会话流评估 expected_trace.missing_fields 无效: {case_id}")
     missing_fields: list[str] = []
-    for field in raw_missing_fields:
+    for field in cast(list[object], raw_missing_fields):
         if not isinstance(field, str) or not field:
             raise ValueError(
                 f"会话流评估 expected_trace.missing_fields 无效: {case_id}"
@@ -435,8 +444,8 @@ def _trace_record(values: dict[str, object]) -> ConversationTurnTraceRecord:
         category=str(values["category"]),
         intent=str(values["intent"]),
         intent_source=str(values["intent_source"]),
-        entities=dict(values["entities"]),  # type: ignore[arg-type]
-        missing_fields=tuple(values["missing_fields"]),  # type: ignore[arg-type]
+        entities=cast(dict[str, str], values["entities"]),
+        missing_fields=cast(tuple[str, ...], values["missing_fields"]),
         handling_result=str(values["handling_result"]),
         is_inactive_reset=bool(values["is_inactive_reset"]),
         created_at=CREATED_AT,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 import re
@@ -25,11 +25,11 @@ from customer_service.conversations.repository import (
     ConversationNotFoundError,
     ConversationPage,
     ConversationRecord,
-    ConversationRepository,
     ConversationTurn,
     ConversationTurnTraceRecord,
+    MessageRecord,
 )
-from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage, RagService
+from customer_service.knowledge.rag import RagAnswer, RagHistoryMessage
 from customer_service.entities.service import extract_entities
 from customer_service.intents.service import (
     IntentDecision,
@@ -127,6 +127,84 @@ class AnswerPolisher(Protocol):
     ) -> RagAnswer: ...
 
 
+class ConversationRepositoryLike(Protocol):
+    async def create_conversation(self, user_id: str) -> ConversationRecord: ...
+
+    async def list_conversations(
+        self,
+        user_id: str,
+        *,
+        limit: int,
+        cursor: ConversationCursor | None,
+    ) -> ConversationPage: ...
+
+    async def conversation_exists(
+        self,
+        conversation_id: UUID,
+        user_id: str,
+    ) -> bool: ...
+
+    async def save_turn(
+        self,
+        *,
+        conversation_id: UUID,
+        user_id: str,
+        user_content: str,
+        assistant_content: str,
+        assistant_sources: list[dict[str, str]],
+    ) -> ConversationTurn: ...
+
+    async def record_turn_trace(
+        self,
+        *,
+        conversation_id: UUID,
+        user_id: str,
+        user_message_id: int | None,
+        assistant_message_id: int | None,
+        route: str,
+        category: str,
+        intent: str,
+        intent_source: str,
+        confidence: float,
+        entities: dict[str, str],
+        missing_fields: tuple[str, ...],
+        handling_result: str,
+        is_inactive_reset: bool,
+    ) -> None: ...
+
+    async def get_recent_messages(
+        self,
+        conversation_id: UUID,
+        *,
+        user_id: str,
+        limit: int,
+    ) -> list[MessageRecord]: ...
+
+    async def get_recent_turn_traces(
+        self,
+        conversation_id: UUID,
+        *,
+        user_id: str,
+        limit: int,
+    ) -> list[ConversationTurnTraceRecord]: ...
+
+    async def get_history(
+        self,
+        conversation_id: UUID,
+        user_id: str,
+    ) -> ConversationHistory: ...
+
+
+class ConversationRagService(Protocol):
+    async def answer(
+        self,
+        question: str,
+        *,
+        history: Sequence[RagHistoryMessage] = (),
+        category: str | None = None,
+    ) -> RagAnswer: ...
+
+
 WITHDRAWAL_STATUS_TASK = BusinessTask(
     entity_key="order_id",
     missing_prompt=WITHDRAWAL_ORDER_ID_PROMPT,
@@ -149,8 +227,8 @@ class ConversationService:
     def __init__(
         self,
         *,
-        repository: ConversationRepository,
-        rag_service: RagService | None,
+        repository: ConversationRepositoryLike,
+        rag_service: ConversationRagService | None,
         withdrawal_service: WithdrawalLookup,
         intent_service: IntentRecognizer,
         deposit_service: DepositLookup | None = None,

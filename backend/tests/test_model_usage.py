@@ -126,7 +126,7 @@ def test_database_model_usage_sink_does_not_raise_on_database_error() -> None:
         async def record_usage(self, usage: ModelUsageRecord) -> None:
             raise SQLAlchemyError("database unavailable")
 
-    sink = DatabaseModelUsageSink(FailingRepository())  # type: ignore[arg-type]
+    sink = DatabaseModelUsageSink(FailingRepository())
 
     asyncio.run(
         sink.record(

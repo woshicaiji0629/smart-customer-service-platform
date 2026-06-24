@@ -140,6 +140,11 @@ def _sample_output(sample: TraceSample, output_format: str) -> dict[str, object]
     raise ValueError(f"未知样本输出格式: {output_format}")
 
 
+time_range_from_args = _time_range_from_args
+sample_candidate = _sample_candidate
+sample_output = _sample_output
+
+
 def _intent_case_draft(sample: TraceSample) -> dict[str, object]:
     return {
         "id": _draft_case_id(sample),

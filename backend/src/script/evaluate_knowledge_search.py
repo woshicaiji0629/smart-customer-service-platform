@@ -8,7 +8,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 from customer_service.knowledge.embeddings import (
     DEFAULT_BASE_URL,
@@ -118,7 +118,10 @@ async def run(args: argparse.Namespace) -> None:
 
 def load_cases(path: Path) -> list[EvaluationCase]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        raw_payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw_payload, dict):
+            raise TypeError
+        payload = cast(dict[str, object], raw_payload)
         raw_cases = payload["cases"]
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
         raise ValueError(f"无法读取评估数据: {path}") from exc
@@ -127,17 +130,18 @@ def load_cases(path: Path) -> list[EvaluationCase]:
 
     cases: list[EvaluationCase] = []
     seen_ids: set[str] = set()
-    for raw_case in raw_cases:
+    for raw_case in cast(list[object], raw_cases):
         if not isinstance(raw_case, dict):
             raise ValueError("评估用例必须是对象")
+        case_values = cast(dict[str, object], raw_case)
         try:
-            case_id = raw_case["id"]
-            kind = raw_case["kind"]
-            raw_query = raw_case["query"]
-            raw_expected_ids = raw_case["expected_article_ids"]
+            case_id = case_values["id"]
+            kind = case_values["kind"]
+            raw_query = case_values["query"]
+            raw_expected_ids = case_values["expected_article_ids"]
         except KeyError as exc:
             raise ValueError("评估用例格式错误") from exc
-        raw_category = raw_case.get("category")
+        raw_category = case_values.get("category")
         if not isinstance(case_id, str) or not case_id or case_id in seen_ids:
             raise ValueError(f"评估用例 id 无效或重复: {case_id!r}")
         if kind not in ("positive", "out_of_domain"):
@@ -149,11 +153,11 @@ def load_cases(path: Path) -> list[EvaluationCase]:
             raise ValueError(f"评估用例 query 不能为空: {case_id}")
         if not isinstance(raw_expected_ids, list) or any(
             not isinstance(article_id, str) or not article_id
-            for article_id in raw_expected_ids
+            for article_id in cast(list[object], raw_expected_ids)
         ):
             raise ValueError(f"expected_article_ids 必须是字符串数组: {case_id}")
         category = _parse_category(case_id, raw_category)
-        expected_ids = frozenset(raw_expected_ids)
+        expected_ids = frozenset(cast(list[str], raw_expected_ids))
         if kind == "positive" and not expected_ids:
             raise ValueError(f"正样本缺少 expected_article_ids: {case_id}")
         if kind == "out_of_domain" and expected_ids:

@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy import (
     BigInteger,
@@ -68,6 +68,10 @@ class ModelUsageSummaryItem:
 class ModelUsageSummary:
     total: ModelUsageSummaryItem
     items: list[ModelUsageSummaryItem]
+
+
+class ModelUsageWriter(Protocol):
+    async def record_usage(self, usage: ModelUsageRecord) -> None: ...
 
 
 class ModelUsageRepository:
@@ -183,7 +187,7 @@ class ModelUsageRepository:
 
 
 class DatabaseModelUsageSink:
-    def __init__(self, repository: ModelUsageRepository) -> None:
+    def __init__(self, repository: ModelUsageWriter) -> None:
         self._repository = repository
 
     async def record(self, usage: ModelUsageRecord) -> None:
